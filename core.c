@@ -37,7 +37,7 @@ unsigned short checksum(void *b, int len) {
     return result;
 }
 
-void send_request(int sockfd, struct sockaddr_in *addr, int seq_num) {
+int send_request(int sockfd, struct sockaddr_in *addr, int seq_num) {
     /*
         Создаем буфер для ICMP пакета в виде структуры,
         заполняем буфер, вычисляем контрольную сумму,
@@ -62,38 +62,62 @@ void send_request(int sockfd, struct sockaddr_in *addr, int seq_num) {
     // Отправляем запрос
     if (sendto(sockfd, packet, DEFAULT_PACKET_SIZE, 0, (struct sockaddr *)addr, sizeof(*addr)) == -1) {
         perror("Ошибка отправки запроса к адресу: send_request");
-        return -1;
+        return 1;
     }
 
     return 0;
 }
 
-void receive_ping(int sockfd, struct sockaddr_in *addr) {
+int receive_response(int sockfd, struct sockaddr_in *addr, int seq_num) {
     /*
         Создаем буфер для ICMP пакета, получаем пакет, обрабатываем
         ответ, выводим информацию о пакете.
     */
+   
+    // Буфер
     char buffer[DEFAULT_PACKET_SIZE];
+    memset(buffer, 0, DEFAULT_PACKET_SIZE);
+
+    // адрес и размер адреса
     struct sockaddr_in response_addr;
     socklen_t response_addr_len = sizeof(response_addr);
-    struct iphdr *ip_header;
-    struct icmp *icmp_packet;
-    int bytes_received;
 
-    memset(buffer, 0, DEFAULT_PACKET_SIZE);
-    bytes_received = recvfrom(sockfd, buffer, DEFAULT_PACKET_SIZE, 0, (struct sockaddr *)&response_addr, &response_addr_len);
-
+    // Получение ответа от хоста
+    int bytes_received = recvfrom(sockfd, buffer, DEFAULT_PACKET_SIZE, 0, (struct sockaddr *)&response_addr, &response_addr_len);
     if (bytes_received < 0) {
-        perror("recvfrom");
+        perror("Ошибка получения запроса от адреса: receive_response");
+        return 1;
+    }
+    
+    // Проверка, что ответ пришел не от целевого хоста (крайне маловероятно)
+    if (response_addr.sin_addr.s_addr != addr->sin_addr.s_addr) {
+        printf("Получено сообщение не от целевого хоста\n");
+        return -1;
     }
 
-    ip_header = (struct iphdr *)buffer;
-    icmp_packet = (struct icmp *)(buffer + (ip_header->ihl << 2));
+    // Получаем заголовки для IP/ICMP
+    struct iphdr *ip_header = (struct iphdr *)buffer;
+    struct icmp *icmp_packet = (struct icmp *)(buffer + (ip_header->ihl << 2));
     
-    if (icmp_packet->icmp_type == ICMP_ECHOREPLY) {
-        printf("Reply from %s: icmp_seq=%u ttl=%d\n",
-            inet_ntoa(response_addr.sin_addr), icmp_packet->icmp_seq, ip_header->ttl);
+    // Packet = icmp_echo_reply и ожидаемый номер запроса
+    if (icmp_packet->icmp_type == ICMP_ECHOREPLY && icmp_packet->icmp_seq == seq_num) {
+        
+        struct timeval *sent_time = (struct timeval *)icmp_packet->icmp_data;
+        struct timeval received_time;
+        gettimeofday(&received_time, NULL);
+        // Вычисление round-trip time (дельта t2-t1)
+        double rtt = (received_time.tv_sec - sent_time->tv_sec) * 1000.0 + (received_time.tv_usec - sent_time->tv_usec) / 1000.0;
+        
+        // Вывод информации о пакете
+        printf("%zd bytes from %s: icmp_seq=%d ttl=%d time=%.2f ms\n",
+               bytes_received, inet_ntoa(response_addr.sin_addr), icmp_packet->icmp_seq, ip_header->ttl, rtt);
+    } else {
+        printf("Получен непредвиденный ICMP ответ\n");
+        return -2;
     }
+
+    return 0;
+    
 }
 
 
@@ -135,7 +159,7 @@ int ping_loop(char *ip) {
 
     for (int i = 0; i < DEFAULT_COUNT; i++) {
         send_request(sockfd, &addr, seq_num);
-        receive_ping(sockfd, &addr);
+        receive_response(sockfd, &addr);
         sleep(1);
         ++seq_num;
     }
