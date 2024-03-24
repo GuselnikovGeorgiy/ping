@@ -57,7 +57,7 @@ int send_request(int sockfd, struct sockaddr_in *addr, int seq_num) {
     gettimeofday((struct timeval *)icmp_packet->icmp_data, NULL); // Временные метки
 
     // Считаем контрольную сумму пакета
-    icmp_packet->icmp_cksum = in_cksum((unsigned short *)icmp_packet, DEFAULT_PACKET_SIZE);
+    icmp_packet->icmp_cksum = checksum((unsigned short *)icmp_packet, DEFAULT_PACKET_SIZE);
 
     // Отправляем запрос
     if (sendto(sockfd, packet, DEFAULT_PACKET_SIZE, 0, (struct sockaddr *)addr, sizeof(*addr)) == -1) {
@@ -110,7 +110,7 @@ int receive_response(int sockfd, struct sockaddr_in *addr, int seq_num) {
                     (received_time.tv_usec - sent_time->tv_usec) / 1000.0;
         
         // Вывод информации о пакете
-        printf("%zd bytes from %s: icmp_seq=%d ttl=%d time=%.2f ms\n",
+        printf("%d bytes from %s: icmp_seq=%d ttl=%d time=%.2f ms\n",
                bytes_received, inet_ntoa(response_addr.sin_addr), icmp_packet->icmp_seq, ip_header->ttl, rtt);
     } else {
         printf("Получен непредвиденный ICMP ответ\n");
@@ -122,7 +122,7 @@ int receive_response(int sockfd, struct sockaddr_in *addr, int seq_num) {
 }
 
 
-int ping_loop(char *ip, int count, int loop) {
+int ping_loop(const char *ip, int count, int loop) {
     /*
         Главный цикл пинга, создаем сокет, устанавливаем подключение,
         в этом цикле происходит отправка запросов и прием ответов от хоста.
@@ -202,12 +202,29 @@ int main(int argc, char *argv[]) {
         Запуск главного цикла.
         *** TODO: вынести проверку в отдельную функцию "CheckArgs"
     */
-    if (argc != 2) {
-        printf("Usage: %s <hostname or IP address>\n", argv[0]);
+    int count = DEFAULT_COUNT;
+    int loop = 0;
+    const char *ip = NULL;
+
+    if (argc < 2 || argc > 3) {
+        printf("Usage: %s <IPv4> [count] or [-t]\n", argv[0]);
         return 1;
     }
+    // todo проверить регуляркой айпишник
+    ip = argv[1];
 
-    ping_loop(argv[1]);
+    if (argc > 2) {
+        if (strcmp(argv[2], "-t") == 0) {
+            loop = 1;
+        } else {
+            count = atoi(argv[2]);
+            if (count <= 0) {
+                printf("Недопустимое значение для count.\n");
+                return 1;
+            }
+        }
+    }
+    ping_loop(ip, count, loop);
 
     return 0;
 }
