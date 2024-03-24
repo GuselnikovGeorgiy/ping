@@ -106,7 +106,8 @@ int receive_response(int sockfd, struct sockaddr_in *addr, int seq_num) {
         struct timeval received_time;
         gettimeofday(&received_time, NULL);
         // Вычисление round-trip time (дельта t2-t1)
-        double rtt = (received_time.tv_sec - sent_time->tv_sec) * 1000.0 + (received_time.tv_usec - sent_time->tv_usec) / 1000.0;
+        double rtt = (received_time.tv_sec - sent_time->tv_sec) * 1000.0 + 
+                    (received_time.tv_usec - sent_time->tv_usec) / 1000.0;
         
         // Вывод информации о пакете
         printf("%zd bytes from %s: icmp_seq=%d ttl=%d time=%.2f ms\n",
@@ -121,31 +122,37 @@ int receive_response(int sockfd, struct sockaddr_in *addr, int seq_num) {
 }
 
 
-int ping_loop(char *ip) {
+int ping_loop(char *ip, int count, int loop) {
     /*
         Главный цикл пинга, создаем сокет, устанавливаем подключение,
         в этом цикле происходит отправка запросов и прием ответов от хоста.
         Вывод статистики о подключении.
     */
-    struct hostent *host;
+    int sockfd; // Дескриптор сокета
+
+    int seq_num = 0;
+    int packets_sent = 0;
+    int packets_received = 0;
+
     struct sockaddr_in addr;
-    int sockfd;
-    struct timeval timeout;
+    struct timeval start_time, end_time;
+    double total_time = 0;
 
-    if ((host = gethostbyname(ip)) == NULL) {
-        perror("gethostbyname");
-        return 1;
-    }
-
-    addr.sin_family = AF_INET;
-    addr.sin_port = 0;
-    addr.sin_addr = *((struct in_addr *)host->h_addr);
-
+    // Создаем сокет для общения с хостом
     if ((sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) < 0) {
         perror("socket");
         return 1;
     }
 
+    // Структура адреса
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = inet_addr(ip);
+
+    gettimeofday(&start_time, NULL);
+
+    // Устанавливаем таймаут для пинга
+    struct timeval timeout;
     timeout.tv_sec = PING_TIMEOUT;
     timeout.tv_usec = 0;
     if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout)) < 0) {
@@ -153,16 +160,38 @@ int ping_loop(char *ip) {
         return 1;
     }
 
-    printf("PING %s:\n", ip);
+    printf("Pinging %s, with %d bytes of data:\n", ip, DEFAULT_PACKET_SIZE);
 
-    int seq_num = 0;
+    while (1) {
+        
+        if (packets_sent >= count && !loop) {
+            break;
+        }
 
-    for (int i = 0; i < DEFAULT_COUNT; i++) {
-        send_request(sockfd, &addr, seq_num);
-        receive_response(sockfd, &addr);
-        sleep(1);
+        if (send_request(sockfd, &addr, seq_num) != 0) {
+            break;
+        }
+        if (receive_response(sockfd, &addr, seq_num) != 0) {
+            break;
+        }
+
         ++seq_num;
+        ++packets_sent;
+        ++packets_received;
+
+        sleep(1);
     }
+
+    gettimeofday(&end_time, NULL);
+
+    total_time = (double)(end_time.tv_sec - start_time.tv_sec) * 1000 +
+                 (double)(end_time.tv_usec - start_time.tv_usec) / 1000;
+
+    // Статистика
+    printf("\n--- Ping statistics ---\n");
+    printf("%d packets transmitted, %d received, %.2f%% packet loss, time %.2fms\n",
+           packets_sent, packets_received, 
+           ((double)(packets_sent - packets_received) / packets_sent) * 100, total_time);
 
     close(sockfd);
     return 0;
