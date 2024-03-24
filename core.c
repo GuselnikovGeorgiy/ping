@@ -37,30 +37,35 @@ unsigned short checksum(void *b, int len) {
     return result;
 }
 
-void send_ping(int sockfd, struct sockaddr_in *addr) {
+void send_request(int sockfd, struct sockaddr_in *addr, int seq_num) {
     /*
         Создаем буфер для ICMP пакета в виде структуры,
         заполняем буфер, вычисляем контрольную сумму,
         отправляем пакет.
     */
-    struct icmp *icmp_packet;
     char packet[DEFAULT_PACKET_SIZE];
-    int packet_size;
+    memset(packet, 0, DEFAULT_PACKET_SIZE);
 
-    icmp_packet = (struct icmp *)packet;
-    memset(icmp_packet, 0, DEFAULT_PACKET_SIZE);
-
+    struct icmp *icmp_packet = (struct icmp *)packet;
+    // Структура заголовка для ICMP
     icmp_packet->icmp_type = ICMP_ECHO;
     icmp_packet->icmp_code = 0;
-    icmp_packet->icmp_id = getpid();
-    icmp_packet->icmp_seq = 1;
-    icmp_packet->icmp_cksum = checksum(icmp_packet, sizeof(struct icmp));
+    icmp_packet->icmp_id = getpid(); // pid процесса
+    icmp_packet->icmp_seq = seq_num;
+    icmp_packet->icmp_cksum = 0;
 
-    packet_size = sizeof(struct icmp);
+    gettimeofday((struct timeval *)icmp_packet->icmp_data, NULL); // Временные метки
 
-    if (sendto(sockfd, packet, packet_size, 0, (struct sockaddr *)addr, sizeof(struct sockaddr)) <= 0) {
-        perror("sendto");
+    // Считаем контрольную сумму пакета
+    icmp_packet->icmp_cksum = in_cksum((unsigned short *)icmp_packet, DEFAULT_PACKET_SIZE);
+
+    // Отправляем запрос
+    if (sendto(sockfd, packet, DEFAULT_PACKET_SIZE, 0, (struct sockaddr *)addr, sizeof(*addr)) == -1) {
+        perror("Ошибка отправки запроса к адресу: send_request");
+        return -1;
     }
+
+    return 0;
 }
 
 void receive_ping(int sockfd, struct sockaddr_in *addr) {
@@ -126,10 +131,13 @@ int ping_loop(char *ip) {
 
     printf("PING %s:\n", ip);
 
+    int seq_num = 0;
+
     for (int i = 0; i < DEFAULT_COUNT; i++) {
-        send_ping(sockfd, &addr);
+        send_request(sockfd, &addr, seq_num);
         receive_ping(sockfd, &addr);
         sleep(1);
+        ++seq_num;
     }
 
     close(sockfd);
