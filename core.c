@@ -4,16 +4,22 @@
 #include <unistd.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <netinet/ip.h>
 #include <netinet/ip_icmp.h>
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <sys/time.h>
+#include <sys/socket.h>
+#include <signal.h>
 
-#define PACKET_SIZE     4096
+#define DEFAULT_PACKET_SIZE 64
 #define PING_TIMEOUT    2
 #define DEFAULT_COUNT   4
 
-unsigned short checksum(void *b, int len) {    
+unsigned short checksum(void *b, int len) {   
+    /* 
+        Проверяем контрольную сумму ICMP пакета
+    */ 
     unsigned short *buf = b;
     unsigned int sum = 0;
     unsigned short result;
@@ -32,12 +38,17 @@ unsigned short checksum(void *b, int len) {
 }
 
 void send_ping(int sockfd, struct sockaddr_in *addr) {
+    /*
+        Создаем буфер для ICMP пакета в виде структуры,
+        заполняем буфер, вычисляем контрольную сумму,
+        отправляем пакет.
+    */
     struct icmp *icmp_packet;
-    char packet[PACKET_SIZE];
+    char packet[DEFAULT_PACKET_SIZE];
     int packet_size;
 
     icmp_packet = (struct icmp *)packet;
-    memset(icmp_packet, 0, PACKET_SIZE);
+    memset(icmp_packet, 0, DEFAULT_PACKET_SIZE);
 
     icmp_packet->icmp_type = ICMP_ECHO;
     icmp_packet->icmp_code = 0;
@@ -53,15 +64,19 @@ void send_ping(int sockfd, struct sockaddr_in *addr) {
 }
 
 void receive_ping(int sockfd, struct sockaddr_in *addr) {
-    char buffer[PACKET_SIZE];
+    /*
+        Создаем буфер для ICMP пакета, получаем пакет, обрабатываем
+        ответ, выводим информацию о пакете.
+    */
+    char buffer[DEFAULT_PACKET_SIZE];
     struct sockaddr_in response_addr;
     socklen_t response_addr_len = sizeof(response_addr);
     struct iphdr *ip_header;
     struct icmp *icmp_packet;
     int bytes_received;
 
-    memset(buffer, 0, PACKET_SIZE);
-    bytes_received = recvfrom(sockfd, buffer, PACKET_SIZE, 0, (struct sockaddr *)&response_addr, &response_addr_len);
+    memset(buffer, 0, DEFAULT_PACKET_SIZE);
+    bytes_received = recvfrom(sockfd, buffer, DEFAULT_PACKET_SIZE, 0, (struct sockaddr *)&response_addr, &response_addr_len);
 
     if (bytes_received < 0) {
         perror("recvfrom");
@@ -78,6 +93,11 @@ void receive_ping(int sockfd, struct sockaddr_in *addr) {
 
 
 int ping_loop(char *ip) {
+    /*
+        Главный цикл пинга, создаем сокет, устанавливаем подключение,
+        в этом цикле происходит отправка запросов и прием ответов от хоста.
+        Вывод статистики о подключении.
+    */
     struct hostent *host;
     struct sockaddr_in addr;
     int sockfd;
@@ -117,6 +137,10 @@ int ping_loop(char *ip) {
 }
 
 int main(int argc, char *argv[]) {
+    /*
+        Запуск главного цикла.
+        *** TODO: вынести проверку в отдельную функцию "CheckArgs"
+    */
     if (argc != 2) {
         printf("Usage: %s <hostname or IP address>\n", argv[0]);
         return 1;
