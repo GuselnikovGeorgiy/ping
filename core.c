@@ -11,10 +11,13 @@
 #include <sys/time.h>
 #include <sys/socket.h>
 #include <signal.h>
+#include <regex.h>
+
 
 #define DEFAULT_PACKET_SIZE 64
 #define PING_TIMEOUT    2
 #define DEFAULT_COUNT   4
+#define DEFAULT_SLEEP_TIME 1  //seconds
 
 unsigned short checksum(void *b, int len) {   
     /* 
@@ -179,7 +182,7 @@ int ping_loop(const char *ip, int count, int loop) {
         ++packets_sent;
         ++packets_received;
 
-        sleep(1);
+        sleep(DEFAULT_SLEEP_TIME);
     }
 
     gettimeofday(&end_time, NULL);
@@ -197,34 +200,83 @@ int ping_loop(const char *ip, int count, int loop) {
     return 0;
 }
 
-int main(int argc, char *argv[]) {
+
+int validate_ip(const char *ip) {
     /*
-        Запуск главного цикла.
-        *** TODO: вынести проверку в отдельную функцию "CheckArgs"
+        Проверяем ip на валидность
     */
-    int count = DEFAULT_COUNT;
-    int loop = 0;
-    const char *ip = NULL;
+    regex_t regex;
+    int result;
+
+    char *pattern = "^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$";
+
+    result = regcomp(&regex, pattern, REG_EXTENDED);
+    if (result) {
+        fprintf(stderr, "Невозможно скомпилировать регулярное выражение\n");
+        return -1;
+    }
+
+    result = regexec(&regex, ip, 0, NULL, 0);
+    regfree(&regex);
+
+    if (!result) {
+        return 0; // соответствует IPv4
+    } else if (result == REG_NOMATCH) {
+        printf("Задан неверный IP\n");
+        return 1;
+    } else {
+        fprintf(stderr, "Ошибка при работе с регулярным выражением\n");
+        return -1;
+    }
+}
+
+
+int check_args(int argc, char *argv[]) {
+    /*
+        Проверяем входные аргументы при запуске программы
+    */
+    int count;
+    int loop;
+    const char *ip = argv[1];
 
     if (argc < 2 || argc > 3) {
         printf("Usage: %s <IPv4> [count] or [-t]\n", argv[0]);
-        return 1;
+        return -1;
     }
-    // todo проверить регуляркой айпишник
-    ip = argv[1];
-
-    if (argc > 2) {
-        if (strcmp(argv[2], "-t") == 0) {
-            loop = 1;
-        } else {
-            count = atoi(argv[2]);
-            if (count <= 0) {
-                printf("Недопустимое значение для count.\n");
-                return 1;
+    
+    if (validate_ip(ip) == 0) {
+        if (argc > 2) {
+            if (strcmp(argv[2], "-t") == 0) {
+                loop = 1;
+            } else {
+                count = atoi(argv[2]);
+                if (count <= 0) {
+                    printf("Недопустимое значение: %s.\n", argv[2]);
+                    return 1;
+                }
             }
         }
-    }
-    ping_loop(ip, count, loop);
 
+        return 0;
+    }
+
+    return 1;
+}
+
+
+int main(int argc, char *argv[]) {
+    
+    if (check_args(argc, argv) == 0) {
+        const char *ip = argv[1];
+        int count = DEFAULT_COUNT;
+        int loop = 0;
+        if (argc > 2)
+            if (strcmp(argv[2], "-t") == 0)
+                loop = 1;
+            else
+                count = atoi(argv[2]);
+        ping_loop(ip, count, loop);
+    }
+    
     return 0;
 }
