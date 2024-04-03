@@ -22,6 +22,12 @@
 
 int interrupted = 0;
 
+int count = DEFAULT_COUNT;
+int loop = 0;
+char *path = "";  // default path to log
+char *ipv4 = "";
+
+
 
 void sigint_handler(int sigint) {
     interrupted = 1;
@@ -246,16 +252,15 @@ int check_args(int argc, char *argv[]) {
     /*
         Проверяем входные аргументы при запуске программы
     */
-    int count;
-    int loop;
-    const char *ip = argv[1];
+
+    ipv4 = argv[1];
 
     if (argc < 2 || argc > 3) {
         printf("Usage: %s <IPv4> [count] or [-t]\n", argv[0]);
         return -1;
     }
     
-    if (validate_ip(ip) == 0) {
+    if (validate_ip(ipv4) == 0) {
         if (argc > 2) {
             if (strcmp(argv[2], "-t") == 0) {
                 loop = 1;
@@ -278,15 +283,7 @@ int check_args(int argc, char *argv[]) {
 int main(int argc, char *argv[]) {
     
     if (check_args(argc, argv) == 0) {
-        const char *ip = argv[1];
-        int count = DEFAULT_COUNT;
-        int loop = 0;
-        if (argc > 2)
-            if (strcmp(argv[2], "-t") == 0)
-                loop = 1;
-            else
-                count = atoi(argv[2]);
-        ping_loop(ip, count, loop);
+        ping_loop(ipv4, count, loop);
     }
     
     return 0;
