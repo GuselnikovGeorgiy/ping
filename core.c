@@ -12,11 +12,13 @@
 #include <sys/socket.h>
 #include <signal.h>
 #include <regex.h>
+#include <time.h>
 
 
 #define DEFAULT_PACKET_SIZE 64
 #define PING_TIMEOUT    2
 #define DEFAULT_COUNT   4
+#define DEFAULT_PORT    80
 #define DEFAULT_SLEEP_TIME 1  //seconds
 
 unsigned short checksum(void *b, int len) {   
@@ -38,6 +40,82 @@ unsigned short checksum(void *b, int len) {
     result = ~sum;
 
     return result;
+}
+
+int print_results(int bytes_received, char* sin_addr, int seq, double ttl, double rtt) {
+    /*
+       Вывод информации о пакете 
+    */
+    printf("%d bytes from %s: icmp_seq=%d ttl=%d time=%.2f ms\n", bytes_received, sin_addr, seq, ttl, rtt);
+
+    return 0;
+}
+
+int tcp_ping_loop(const char *ip, int count, int loop) {
+    int seq_num = 0;
+    int packets_sent = 0;
+    int packets_received = 0;
+
+    int sockfd;
+    struct sockaddr_in addr;
+
+    if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        perror("Creating tcp socket failed");
+        return 1;
+    }
+
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = inet_addr(ip);
+    // TODO: Добавить получение порта от пользователя
+    addr.sin_port = htons(DEFAULT_PORT);
+
+    if (connect(sockfd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+        perror("Connecting tcp socket failed");
+        return 1;
+    }
+
+    while (1) {   
+        if (packets_sent >= count && !loop) {
+            break;
+        }
+
+        int bytes_received;
+        int rtt;
+        struct timespec send_time, response_time;
+        clock_gettime(CLOCK_MONOTONIC, &send_time);
+
+        char buffer[10];
+        snprintf(buffer, sizeof(buffer), "s");
+
+        if (sendto(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+            perror("Sendto tcp failed");
+            break;
+        }
+
+        char response[10];
+        memset(response, 0, sizeof(response));
+
+        if ((bytes_received = recvfrom(sockfd, response, sizeof(response), 0, NULL, NULL)) < 0) {
+            perror("Recfrom tcp failed");
+            break;
+        }
+
+        clock_gettime(CLOCK_MONOTONIC, &response_time);
+        rtt = (response_time.tv_sec - send_time.tv_sec) * 1000;
+        rtt += (response_time.tv_nsec - send_time.tv_nsec) / 1000000;
+
+        print_results(bytes_received, inet_ntoa(addr.sin_addr), seq_num, 0.00, rtt);
+
+        ++seq_num;
+        ++packets_sent;
+        ++packets_received;
+
+        sleep(DEFAULT_SLEEP_TIME);
+    }
+
+    close(sockfd);
+
+    return 0;
 }
 
 int send_request(int sockfd, struct sockaddr_in *addr, int seq_num) {
@@ -113,8 +191,7 @@ int receive_response(int sockfd, struct sockaddr_in *addr, int seq_num) {
                     (received_time.tv_usec - sent_time->tv_usec) / 1000.0;
         
         // Вывод информации о пакете
-        printf("%d bytes from %s: icmp_seq=%d ttl=%d time=%.2f ms\n",
-               bytes_received, inet_ntoa(response_addr.sin_addr), icmp_packet->icmp_seq, ip_header->ttl, rtt);
+        print_results(bytes_received, inet_ntoa(response_addr.sin_addr), icmp_packet->icmp_seq, ip_header->ttl, rtt);
     } else {
         printf("Получен непредвиденный ICMP ответ\n");
         return -2;
@@ -275,7 +352,7 @@ int main(int argc, char *argv[]) {
                 loop = 1;
             else
                 count = atoi(argv[2]);
-        ping_loop(ip, count, loop);
+        tcp_ping_loop(ip, count, loop);
     }
     
     return 0;
