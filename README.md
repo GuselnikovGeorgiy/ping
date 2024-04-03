@@ -4,7 +4,7 @@
 
 ```
 gcc core.c -o ping
-sudo ./ping <IPv4> [num of requests} or [-t]
+sudo ./ping <IPv4> [num of requests] or [-t]
 ```
 ### Example
 
