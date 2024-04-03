@@ -12,12 +12,20 @@
 #include <sys/socket.h>
 #include <signal.h>
 #include <regex.h>
+#include <signal.h>
 
 
-#define DEFAULT_PACKET_SIZE 64
-#define PING_TIMEOUT    2
-#define DEFAULT_COUNT   4
+#define DEFAULT_PACKET_SIZE 64  //bytes
+#define PING_TIMEOUT    2     //seconds
+#define DEFAULT_COUNT   4     //numbers of requests
 #define DEFAULT_SLEEP_TIME 1  //seconds
+
+int interrupted = 0;
+
+
+void sigint_handler(int sigint) {
+    interrupted = 1;
+}
 
 unsigned short checksum(void *b, int len) {   
     /* 
@@ -88,8 +96,8 @@ int receive_response(int sockfd, struct sockaddr_in *addr, int seq_num) {
     // Получение ответа от хоста
     int bytes_received = recvfrom(sockfd, buffer, DEFAULT_PACKET_SIZE, 0, (struct sockaddr *)&response_addr, &response_addr_len);
     if (bytes_received < 0) {
-        perror("Ошибка получения запроса от адреса: receive_response");
-        return 1;
+        printf("Request timed out...\n");
+        return 0;
     }
     
     // Проверка, что ответ пришел не от целевого хоста (крайне маловероятно)
@@ -131,6 +139,9 @@ int ping_loop(const char *ip, int count, int loop) {
         в этом цикле происходит отправка запросов и прием ответов от хоста.
         Вывод статистики о подключении.
     */
+
+    signal(SIGINT, sigint_handler);
+
     int sockfd; // Дескриптор сокета
 
     int seq_num = 0;
@@ -165,7 +176,7 @@ int ping_loop(const char *ip, int count, int loop) {
 
     printf("Pinging %s, with %d bytes of data:\n", ip, DEFAULT_PACKET_SIZE);
 
-    while (1) {
+    while (!interrupted) {
         
         if (packets_sent >= count && !loop) {
             break;
