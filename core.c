@@ -138,8 +138,20 @@ int receive_response(int sockfd, struct sockaddr_in *addr, int seq_num) {
     
 }
 
+int print_statisctics(int packets_sent, int packets_received, double total_time) {
+    /*
+        Вывод статистики
+    */
+    printf("\n--- Ping statistics ---\n");
+    printf("%d packets transmitted, %d received, %.2f%% packet loss, time %.2fms\n",
+           packets_sent, packets_received, 
+           ((double)(packets_sent - packets_received) / packets_sent) * 100, total_time);
+    
+    return 0;
+}
 
-int ping_loop(const char *ip, int count, int loop) {
+
+int requests_loop(const char *ip, int count, int loop) {
     /*
         Главный цикл пинга, создаем сокет, устанавливаем подключение,
         в этом цикле происходит отправка запросов и прием ответов от хоста.
@@ -207,11 +219,8 @@ int ping_loop(const char *ip, int count, int loop) {
     total_time = (double)(end_time.tv_sec - start_time.tv_sec) * 1000 +
                  (double)(end_time.tv_usec - start_time.tv_usec) / 1000;
 
-    // Статистика
-    printf("\n--- Ping statistics ---\n");
-    printf("%d packets transmitted, %d received, %.2f%% packet loss, time %.2fms\n",
-           packets_sent, packets_received, 
-           ((double)(packets_sent - packets_received) / packets_sent) * 100, total_time);
+    // Вывод статистики
+    print_statisctics(packets_sent, packets_received, total_time);
 
     close(sockfd);
     return 0;
@@ -279,11 +288,101 @@ int check_args(int argc, char *argv[]) {
     return 1;
 }
 
+void finish() {
+    exit(0);
+}
+
+int check_log() {
+    return 0;
+}
+
+int diag_check_log() {
+    return 0;
+}
+
+int create_log() {
+    return 0;
+}
+
+int diag_create_log() {
+    return 0;
+}
+
+int diag_check_args() {
+    return 0;
+}
+
+
+int diag_requests_loop() {
+    return 0;
+}
+
 
 int main(int argc, char *argv[]) {
-    
-    if (check_args(argc, argv) == 0) {
-        ping_loop(ipv4, count, loop);
+
+    /* Проверка аргументов */
+    switch(check_args(argc, argv)) {
+        /* Аргументы верные */
+        case 0:
+            /* Проверка наличия лога */
+            switch(check_log()) {
+                /* Лог есть, ничего делать не надо */
+                case 0:
+                    /* Цикл запросов */
+                    switch (requests_loop(ipv4, count, loop)) {
+                        /* Конец */
+                        case 0:
+                            finish();
+                            break;
+
+                        /* Критическая ошибка при отправке запросов */                            
+                        case 1:
+                            diag_requests_loop();
+                            finish();
+                            break;
+                    }
+                /* Не удалось проверить наличие лога */
+                case 1:
+                    diag_check_log();
+                    finish();
+                    break;
+
+                /* Нужно создать лог */
+                case 2:
+                    /* Создание лога */
+                    switch (create_log()) {
+                        /* Лог успешно создан */
+                        case 0: 
+                            /* Цикл запросов */
+                            switch (requests_loop(ipv4, count, loop)) {
+                                /* Конец */
+                                case 0:
+                                    finish();
+                                    break;
+
+                                /* Критическая ошибка при отправке запросов */                            
+                                case 1:
+                                    diag_requests_loop();
+                                    finish();
+                                    break;
+                            }
+                            break;
+                    
+                        /* Произошла ошибка при создании лога */
+                        case 1:
+                            diag_create_log();
+                            finish();
+                            break;
+                    }
+                    break;
+            }
+            break;
+
+        /* Аргументы неверные */
+        case 1:
+            diag_check_args();
+            finish();
+            break;
     }
     
     return 0;
