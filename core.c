@@ -107,14 +107,13 @@ int receive_response(int sockfd, struct sockaddr_in *addr, int seq_num) {
     // Получение ответа от хоста
     int bytes_received = recvfrom(sockfd, buffer, DEFAULT_PACKET_SIZE, 0, (struct sockaddr *)&response_addr, &response_addr_len);
     if (bytes_received < 0) {
-        printf("Request timed out...\n");
-        return 0;
+        return -1;
     }
     
     // Проверка, что ответ пришел не от целевого хоста (крайне маловероятно)
     if (response_addr.sin_addr.s_addr != addr->sin_addr.s_addr) {
         printf("Получено сообщение не от целевого хоста\n");
-        return -1;
+        return 1;
     }
 
     // Получаем заголовки для IP/ICMP
@@ -148,7 +147,7 @@ int print_statisctics(int packets_sent, int packets_received, double total_time)
         Вывод статистики
     */
     printf("\n--- Ping statistics ---\n");
-    printf("%d packets transmitted, %d received, %.2f%% packet loss, time %.2fms\n",
+    printf("%d packets transmitted, %d received, %.2f packet loss, time %.2fms\n",
            packets_sent, packets_received, 
            ((double)(packets_sent - packets_received) / packets_sent) * 100, total_time);
     
@@ -208,13 +207,20 @@ int requests_loop(const char *ip, int count, int loop) {
         if (send_request(sockfd, &addr, seq_num) != 0) {
             break;
         }
-        if (receive_response(sockfd, &addr, seq_num) != 0) {
-            break;
+
+        switch(receive_response(sockfd, &addr, seq_num)) {
+            case 0:
+                ++packets_received;
+                break;
+            case -1:
+                printf("Request timed out...\n");
+                break;
+            default:
+                return 1;
         }
 
         ++seq_num;
         ++packets_sent;
-        ++packets_received;
 
         sleep(DEFAULT_SLEEP_TIME);
     }
