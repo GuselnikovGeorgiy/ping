@@ -13,6 +13,11 @@
 #include <signal.h>
 #include <regex.h>
 #include <signal.h>
+#include <ctype.h>
+#include <errno.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include <limits.h>
 
 
 #define DEFAULT_PACKET_SIZE 64  //bytes
@@ -256,6 +261,17 @@ int validate_ip(const char *ip) {
     }
 }
 
+int is_int(const char *num) {
+    char *endptr;
+    strtol(num, &endptr, 10);
+
+    if ((errno == ERANGE && (strtol(num, NULL, 10) == LONG_MAX || strtol(num, NULL, 10) == LONG_MIN)) || (errno != 0 && strtol(num, NULL, 10)== 0))
+        return 1;
+    if (*endptr == '\0')
+        return 0;
+    return 1;
+}
+
 
 int check_args(int argc, char *argv[]) {
     /*
@@ -264,22 +280,49 @@ int check_args(int argc, char *argv[]) {
 
     ipv4 = argv[1];
 
-    if (argc < 2 || argc > 3) {
-        printf("Usage: %s <IPv4> [count] or [-t]\n", argv[0]);
+    if (argc < 2 || argc > 4) {
+        printf("Usage: %s <IPv4> [log_dir] [num_count:int |-t]\n", argv[0]);
         return -1;
     }
     
+    int flag_count = 0;
+    int flag_loop = 0;
+    int flag_log = 0;
+
     if (validate_ip(ipv4) == 0) {
-        if (argc > 2) {
-            if (strcmp(argv[2], "-t") == 0) {
-                loop = 1;
-            } else {
-                count = atoi(argv[2]);
-                if (count <= 0) {
-                    printf("Недопустимое значение: %s.\n", argv[2]);
+        for (int i=2; i < argc; ++i) {
+            if (strcmp(argv[i], "-t") == 0) {
+                if (!flag_loop & !flag_count) {
+                    loop = 1;
+                    flag_loop = 1;
+                    continue;
+                }
+                else {
+                    printf("Недопустимое значение: %s.\n", argv[i]);
                     return 1;
                 }
+            } else if (is_int(argv[i]) == 0) {
+                if (!flag_count & !flag_loop) {
+                    count = atoi(argv[i]);
+                    flag_count = 1;
+                    continue;
+                } else {
+                    printf("Недопустимое значение: %s.\n", argv[i]);
+                    return 1;
+                }
+            } else if (access(argv[i], W_OK) != -1 && access(argv[i], F_OK) != -1) {
+                if (!flag_log) {
+                    path = argv[i];
+                    printf("Write log to: %s\n", argv[i]);
+                    flag_log++;
+                    continue;
+                }
             }
+
+        }
+        if (argc > 3 && !flag_log && (flag_count || flag_loop)) {
+            printf("Файл недоступен или не существует.\n");
+            return 1;
         }
 
         return 0;
