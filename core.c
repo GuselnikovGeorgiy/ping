@@ -320,7 +320,7 @@ int check_args(int argc, char *argv[]) {
             }
 
         }
-        if (argc > 3 && !flag_log && (flag_count || flag_loop)) {
+        if ((argc > 3 && !flag_log && (flag_count || flag_loop)) || (!flag_log && argc > 2 && (!flag_count && !flag_loop))) {
             printf("Файл недоступен или не существует.\n");
             return 1;
         }
