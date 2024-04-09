@@ -1,247 +1,50 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <netinet/ip.h>
-#include <netinet/ip_icmp.h>
-#include <arpa/inet.h>
-#include <netdb.h>
-#include <sys/time.h>
-#include <sys/socket.h>
-#include <signal.h>
-#include <regex.h>
-#include <signal.h>
-#include <ctype.h>
-#include <errno.h>
-#include <stdint.h>
-#include <stdbool.h>
-#include <limits.h>
+//
+// ДЕКЛАРАЦИЯ БИБЛИОТЕК
+//
+#include <stdio.h>            // фукнции ввода/вывода
+#include <stdlib.h>           // Cтандартные определения
+#include <string.h>           // Cтроковые операции
+#include <unistd.h>           // Cтандартные символьные константы и типы
+#include <sys/socket.h>       // Основные типы и структуры для работы с сокетами
+#include <netinet/in.h>       // Семейство интернет-адресов
+#include <netinet/ip.h>       // Дополняет семейство интернет-адресов
+#include <netinet/ip_icmp.h>  // Дополняет семейство интернет-адресов типами для icmp прокола
+#include <arpa/inet.h>        // Определения интернет операций
+#include <netdb.h>            // Определения для операций с сетевойо базой данных
+#include <sys/time.h>         // Функции и типы для работы со временем 
+#include <signal.h>           // Функции и типы для работы с сигналами
+#include <regex.h>            // Функции и типы для работы с регулярными выражениями
+#include <ctype.h>            // Функции для работы с типами данных
+#include <errno.h>            // Коды ошибок
+#include <stdint.h>           // Целочисленные типы
+#include <stdbool.h>          // Булевые типы и значения
+#include <limits.h>           // Константы определенные реализацией
 
+//
+// ДЕКЛАРАЦИЯ ПЕРЕМЕННЫХ
+//
+#define DEFAULT_PACKET_SIZE 64  // Размер отправляемого пакета по умолчанию
+#define PING_TIMEOUT    2       // Задержка пинга  --------------
+#define DEFAULT_COUNT   4       // Количество запросов по умолчанию
+#define DEFAULT_SLEEP_TIME 1    // Еще какая-то задержка по умолчанию ------------
 
-#define DEFAULT_PACKET_SIZE 64  //bytes
-#define PING_TIMEOUT    2     //seconds
-#define DEFAULT_COUNT   4     //numbers of requests
-#define DEFAULT_SLEEP_TIME 1  //seconds
+int interrupted;  // что-то    --------------
+int count;        // Количество запросов
+int loop;         // 1 если неограниченное кол-во запросов иначе 0
+char *path;       // Путь до лога
+char *ipv4;       // ipv4 введенный пользователем
 
-int interrupted = 0;
+//
+// ДЕКЛАРАЦИЯ ПРОЦЕДУР
+//
 
-int count = DEFAULT_COUNT;
-int loop = 0;
-char *path = "";  // default path to log
-char *ipv4 = "";
-
-
-
-void sigint_handler(int sigint) {
+void sigint_handler(int sigint) // Функция для сигнала
+{
     interrupted = 1;
 }
 
-unsigned short checksum(void *b, int len) {   
-    /* 
-        Проверяем контрольную сумму ICMP пакета
-    */ 
-    unsigned short *buf = b;
-    unsigned int sum = 0;
-    unsigned short result;
-
-    for (sum = 0; len > 1; len -= 2)
-        sum += *buf++;
-
-    if (len == 1)
-        sum += *(unsigned char *)buf;
-
-    sum = (sum >> 16) + (sum & 0xFFFF);
-    sum += (sum >> 16);
-    result = ~sum;
-
-    return result;
-}
-
-int send_request(int sockfd, struct sockaddr_in *addr, int seq_num) {
-    /*
-        Создаем буфер для ICMP пакета в виде структуры,
-        заполняем буфер, вычисляем контрольную сумму,
-        отправляем пакет.
-    */
-    char packet[DEFAULT_PACKET_SIZE];
-    memset(packet, 0, DEFAULT_PACKET_SIZE);
-
-    struct icmp *icmp_packet = (struct icmp *)packet;
-    // Структура заголовка для ICMP
-    icmp_packet->icmp_type = ICMP_ECHO;
-    icmp_packet->icmp_code = 0;
-    icmp_packet->icmp_id = getpid(); // pid процесса
-    icmp_packet->icmp_seq = seq_num;
-    icmp_packet->icmp_cksum = 0;
-
-    gettimeofday((struct timeval *)icmp_packet->icmp_data, NULL); // Временные метки
-
-    // Считаем контрольную сумму пакета
-    icmp_packet->icmp_cksum = checksum((unsigned short *)icmp_packet, DEFAULT_PACKET_SIZE);
-
-    // Отправляем запрос
-    if (sendto(sockfd, packet, DEFAULT_PACKET_SIZE, 0, (struct sockaddr *)addr, sizeof(*addr)) == -1) {
-        perror("Ошибка отправки запроса к адресу: send_request");
-        return 1;
-    }
-
-    return 0;
-}
-
-int receive_response(int sockfd, struct sockaddr_in *addr, int seq_num) {
-    /*
-        Создаем буфер для ICMP пакета, получаем пакет, обрабатываем
-        ответ, выводим информацию о пакете.
-    */
-   
-    // Буфер
-    char buffer[DEFAULT_PACKET_SIZE];
-    memset(buffer, 0, DEFAULT_PACKET_SIZE);
-
-    // адрес и размер адреса
-    struct sockaddr_in response_addr;
-    socklen_t response_addr_len = sizeof(response_addr);
-
-    // Получение ответа от хоста
-    int bytes_received = recvfrom(sockfd, buffer, DEFAULT_PACKET_SIZE, 0, (struct sockaddr *)&response_addr, &response_addr_len);
-    if (bytes_received < 0) {
-        return -1;
-    }
-    
-    // Проверка, что ответ пришел не от целевого хоста (крайне маловероятно)
-    if (response_addr.sin_addr.s_addr != addr->sin_addr.s_addr) {
-        printf("Получено сообщение не от целевого хоста\n");
-        return 1;
-    }
-
-    // Получаем заголовки для IP/ICMP
-    struct iphdr *ip_header = (struct iphdr *)buffer;
-    struct icmp *icmp_packet = (struct icmp *)(buffer + (ip_header->ihl << 2));
-    
-    // Packet = icmp_echo_reply и ожидаемый номер запроса
-    if (icmp_packet->icmp_type == ICMP_ECHOREPLY && icmp_packet->icmp_seq == seq_num) {
-        
-        struct timeval *sent_time = (struct timeval *)icmp_packet->icmp_data;
-        struct timeval received_time;
-        gettimeofday(&received_time, NULL);
-        // Вычисление round-trip time (дельта t2-t1)
-        double rtt = (received_time.tv_sec - sent_time->tv_sec) * 1000.0 + 
-                    (received_time.tv_usec - sent_time->tv_usec) / 1000.0;
-        
-        // Вывод информации о пакете
-        printf("%d bytes from %s: icmp_seq=%d ttl=%d time=%.2f ms\n",
-               bytes_received, inet_ntoa(response_addr.sin_addr), icmp_packet->icmp_seq, ip_header->ttl, rtt);
-    } else {
-        printf("Получен непредвиденный ICMP ответ\n");
-        return -2;
-    }
-
-    return 0;
-    
-}
-
-int print_statisctics(int packets_sent, int packets_received, double total_time) {
-    /*
-        Вывод статистики
-    */
-    printf("\n--- Ping statistics ---\n");
-    printf("%d packets transmitted, %d received, %.2f packet loss, time %.2fms\n",
-           packets_sent, packets_received, 
-           ((double)(packets_sent - packets_received) / packets_sent) * 100, total_time);
-    
-    return 0;
-}
-
-
-int requests_loop(const char *ip, int count, int loop) {
-    /*
-        Главный цикл пинга, создаем сокет, устанавливаем подключение,
-        в этом цикле происходит отправка запросов и прием ответов от хоста.
-        Вывод статистики о подключении.
-    */
-
-    signal(SIGINT, sigint_handler);
-
-    int sockfd; // Дескриптор сокета
-
-    int seq_num = 0;
-    int packets_sent = 0;
-    int packets_received = 0;
-
-    struct sockaddr_in addr;
-    struct timeval start_time, end_time;
-    double total_time = 0;
-
-    // Создаем сокет для общения с хостом
-    if ((sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) < 0) {
-        perror("socket");
-        return 1;
-    }
-
-    // Структура адреса
-    memset(&addr, 0, sizeof(addr));
-    addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = inet_addr(ip);
-
-    gettimeofday(&start_time, NULL);
-
-    // Устанавливаем таймаут для пинга
-    struct timeval timeout;
-    timeout.tv_sec = PING_TIMEOUT;
-    timeout.tv_usec = 0;
-    if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout)) < 0) {
-        perror("setsockopt");
-        return 1;
-    }
-
-    printf("Pinging %s, with %d bytes of data:\n", ip, DEFAULT_PACKET_SIZE);
-
-    while (!interrupted) {
-        
-        if (packets_sent >= count && !loop) {
-            break;
-        }
-
-        if (send_request(sockfd, &addr, seq_num) != 0) {
-            break;
-        }
-
-        switch(receive_response(sockfd, &addr, seq_num)) {
-            case 0:
-                ++packets_received;
-                break;
-            case -1:
-                printf("Request timed out...\n");
-                break;
-            default:
-                return 1;
-        }
-
-        ++seq_num;
-        ++packets_sent;
-
-        sleep(DEFAULT_SLEEP_TIME);
-    }
-
-    gettimeofday(&end_time, NULL);
-
-    total_time = (double)(end_time.tv_sec - start_time.tv_sec) * 1000 +
-                 (double)(end_time.tv_usec - start_time.tv_usec) / 1000;
-
-    // Вывод статистики
-    print_statisctics(packets_sent, packets_received, total_time);
-
-    close(sockfd);
-    return 0;
-}
-
-
-int validate_ip(const char *ip) {
-    /*
-        Проверяем ip на валидность
-    */
+int validate_ip(const char *ip) // Функция проверки ipv4 на валидность
+{
     regex_t regex;
     int result;
 
@@ -267,7 +70,8 @@ int validate_ip(const char *ip) {
     }
 }
 
-int is_int(const char *num) {
+int is_int(const char *num) // Функция проверки на число
+{
     char *endptr;
     strtol(num, &endptr, 10);
 
@@ -278,12 +82,14 @@ int is_int(const char *num) {
     return 1;
 }
 
-
-int check_args(int argc, char *argv[]) {
-    /*
-        Проверяем входные аргументы при запуске программы
-    */
-
+/*
+* Параметры функции check_args: 
+* int argc - количество аргументов
+* char *argv[] - аргументы
+*/
+int check_args(int argc, char *argv[]) // Функция проверки входных аргументов
+{
+    // TODO: Добавить поинтеры
     ipv4 = argv[1];
 
     if (argc < 2 || argc > 4) {
@@ -337,88 +143,284 @@ int check_args(int argc, char *argv[]) {
     return 1;
 }
 
-void finish() {
+int diag_check_args() // Функция диагностики проверки аргументов
+{
+    return 0;
+}
+
+int check_log() // Функция проверки наличия лога
+{
+    return 0;
+}
+
+int diag_check_log() // Функция диагностики проверки наличия лога
+{
+    return 0;
+}
+
+int write_log() // Функция записи в лог
+{
+    return 0;
+}
+
+int create_log() // Функция создания лога
+{
+    return 0;
+}
+
+int diag_create_log() // Функция диагностики создания лога
+{
+    return 0;
+}
+
+void finish() // Функция завершения программы
+{
     exit(0);
 }
 
-int check_log() {
+unsigned short checksum(void *b, int len) // Функция проверки контрольной суммы ICMP пакета
+{   
+    unsigned short *buf = b;
+    unsigned int sum = 0;
+    unsigned short result;
+
+    for (sum = 0; len > 1; len -= 2)
+        sum += *buf++;
+
+    if (len == 1)
+        sum += *(unsigned char *)buf;
+
+    sum = (sum >> 16) + (sum & 0xFFFF);
+    sum += (sum >> 16);
+    result = ~sum;
+
+    return result;
+}
+
+/**
+ * Параметры send_request:
+ * int sockfd - дескриптор сокета
+ * struct sockaddr_in *addr - структура адреса
+ * int seq_num - номер запроса
+*/
+int send_request(int sockfd, struct sockaddr_in *addr, int seq_num) // Функция отправки icmp запроса
+{
+    // Создаем буфер для ICMP пакета в виде структуры,
+    char packet[DEFAULT_PACKET_SIZE];
+    memset(packet, 0, DEFAULT_PACKET_SIZE);
+
+    struct icmp *icmp_packet = (struct icmp *)packet;
+    // Структура заголовка для ICMP
+    icmp_packet->icmp_type = ICMP_ECHO;
+    icmp_packet->icmp_code = 0;
+    icmp_packet->icmp_id = getpid(); // pid процесса
+    icmp_packet->icmp_seq = seq_num;
+    icmp_packet->icmp_cksum = 0;
+
+    gettimeofday((struct timeval *)icmp_packet->icmp_data, NULL); // Временные метки
+
+    // Считаем контрольную сумму пакета
+    icmp_packet->icmp_cksum = checksum((unsigned short *)icmp_packet, DEFAULT_PACKET_SIZE);
+
+    // Отправляем запрос
+    if (sendto(sockfd, packet, DEFAULT_PACKET_SIZE, 0, (struct sockaddr *)addr, sizeof(*addr)) == -1) {
+        perror("Ошибка отправки запроса к адресу: send_request");
+        return 1;
+    }
+
     return 0;
 }
 
-int diag_check_log() {
+int receive_response(int sockfd, struct sockaddr_in *addr, int seq_num) // Функция получения icmp запроса
+{
+    // Буфер
+    char buffer[DEFAULT_PACKET_SIZE];
+    memset(buffer, 0, DEFAULT_PACKET_SIZE);
+
+    // адрес и размер адреса
+    struct sockaddr_in response_addr;
+    socklen_t response_addr_len = sizeof(response_addr);
+
+    // Получение ответа от хоста
+    int bytes_received = recvfrom(sockfd, buffer, DEFAULT_PACKET_SIZE, 0, (struct sockaddr *)&response_addr, &response_addr_len);
+    if (bytes_received < 0) {
+        return -1;
+    }
+    
+    // Проверка, что ответ пришел не от целевого хоста (крайне маловероятно)
+    if (response_addr.sin_addr.s_addr != addr->sin_addr.s_addr) {
+        printf("Получено сообщение не от целевого хоста\n");
+        return 1;
+    }
+
+    // Получаем заголовки для IP/ICMP
+    struct iphdr *ip_header = (struct iphdr *)buffer;
+    struct icmp *icmp_packet = (struct icmp *)(buffer + (ip_header->ihl << 2));
+    
+    // Packet = icmp_echo_reply и ожидаемый номер запроса
+    if (icmp_packet->icmp_type == ICMP_ECHOREPLY && icmp_packet->icmp_seq == seq_num) {
+        
+        struct timeval *sent_time = (struct timeval *)icmp_packet->icmp_data;
+        struct timeval received_time;
+        gettimeofday(&received_time, NULL);
+        // Вычисление round-trip time (дельта t2-t1)
+        double rtt = (received_time.tv_sec - sent_time->tv_sec) * 1000.0 + 
+                    (received_time.tv_usec - sent_time->tv_usec) / 1000.0;
+        
+        // Вывод информации о пакете
+        printf("%d bytes from %s: icmp_seq=%d ttl=%d time=%.2f ms\n",
+               bytes_received, inet_ntoa(response_addr.sin_addr), icmp_packet->icmp_seq, ip_header->ttl, rtt);
+    } else {
+        printf("Получен непредвиденный ICMP ответ\n");
+        return -2;
+    }
+
     return 0;
 }
 
-int create_log() {
+int print_statisctics(int packets_sent, int packets_received, double total_time) // Функция вывода статистики
+{
+    printf("\n--- Ping statistics ---\n");
+    printf("%d packets transmitted, %d received, %.2f packet loss, time %.2fms\n",
+           packets_sent, packets_received, 
+           ((double)(packets_sent - packets_received) / packets_sent) * 100, total_time);
+    
     return 0;
 }
 
-int diag_create_log() {
+int requests_loop() // Функция главного цикла пинга
+{
+    signal(SIGINT, sigint_handler);
+
+    int sockfd; // Дескриптор сокета
+
+    int seq_num = 0;
+    int packets_sent = 0;
+    int packets_received = 0;
+
+    struct sockaddr_in addr;
+    struct timeval start_time, end_time;
+    double total_time = 0;
+
+    // Создаем сокет для общения с хостом
+    if ((sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) < 0) {
+        perror("socket");
+        return 1;
+    }
+
+    // Структура адреса
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = inet_addr(ipv4);
+
+    gettimeofday(&start_time, NULL);
+
+    // Устанавливаем таймаут для пинга
+    struct timeval timeout;
+    timeout.tv_sec = PING_TIMEOUT;
+    timeout.tv_usec = 0;
+    if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout)) < 0) {
+        perror("setsockopt");
+        return 1;
+    }
+
+    printf("Pinging %s, with %d bytes of data:\n", ipv4, DEFAULT_PACKET_SIZE);
+
+    while (!interrupted) {
+        
+        if (packets_sent >= count && !loop) {
+            break;
+        }
+
+        if (send_request(sockfd, &addr, seq_num) != 0) {
+            break;
+        }
+
+        switch(receive_response(sockfd, &addr, seq_num)) {
+            case 0:
+                ++packets_received;
+                break;
+            case -1:
+                printf("Request timed out...\n");
+                break;
+            default:
+                return 1;
+        }
+
+        ++seq_num;
+        ++packets_sent;
+
+        sleep(DEFAULT_SLEEP_TIME);
+    }
+
+    gettimeofday(&end_time, NULL);
+
+    total_time = (double)(end_time.tv_sec - start_time.tv_sec) * 1000 +
+                 (double)(end_time.tv_usec - start_time.tv_usec) / 1000;
+
+    // Вывод статистики
+    print_statisctics(packets_sent, packets_received, total_time);
+
+    close(sockfd);
     return 0;
 }
 
-int diag_check_args() {
+int diag_requests_loop() // Функция диагностики цикла запросов
+{
     return 0;
 }
 
+int main(int argc, char *argv[]) // Главная функция программы
+{
 
-int diag_requests_loop() {
-    return 0;
-}
+    // Инициализация переменных
+    count = DEFAULT_COUNT;
+    loop = 0;
+    path = "";
+    ipv4 = "";
 
-
-int main(int argc, char *argv[]) {
-
-    /* Проверка аргументов */
-    switch(check_args(argc, argv)) {
-        /* Аргументы верные */
-        case 0:
-            /* Проверка наличия лога */
-            switch(check_log()) {
-                /* Лог есть, ничего делать не надо */
-                case 0:
-                    /* Цикл запросов */
-                    switch (requests_loop(ipv4, count, loop)) {
-                        /* Конец */
-                        case 0:
+    // Тело процедуры
+    switch(check_args(argc, argv)) /* Проверка аргументов */ 
+    {
+        case 0: /* Аргументы верные */
+            switch(check_log()) /* Проверка наличия лога */
+            { 
+                case 0: /* Лог есть, ничего делать не надо */     
+                    switch (requests_loop(ipv4, count, loop))
+                    {
+                        case 0: /* Конец */
                             finish();
                             break;
 
-                        /* Критическая ошибка при отправке запросов */                            
-                        case 1:
+                        case 1: /* Критическая ошибка при отправке запросов */
                             diag_requests_loop();
                             finish();
                             break;
                     }
-                /* Не удалось проверить наличие лога */
-                case 1:
+                
+                case 1: /* Не удалось проверить наличие лога */
                     diag_check_log();
                     finish();
                     break;
 
-                /* Нужно создать лог */
-                case 2:
-                    /* Создание лога */
-                    switch (create_log()) {
-                        /* Лог успешно создан */
-                        case 0: 
-                            /* Цикл запросов */
-                            switch (requests_loop(ipv4, count, loop)) {
-                                /* Конец */
-                                case 0:
+                case 2: /* Нужно создать лог */
+                    switch (create_log()) /* Создание лога */
+                    {
+                        case 0: /* Лог успешно создан */
+                            switch (requests_loop(ipv4, count, loop)) /* Цикл запросов */
+                            {
+                                case 0: /* Конец */
                                     finish();
                                     break;
 
-                                /* Критическая ошибка при отправке запросов */                            
-                                case 1:
+                                case 1: /* Критическая ошибка при отправке запросов */
                                     diag_requests_loop();
                                     finish();
                                     break;
                             }
                             break;
-                    
-                        /* Произошла ошибка при создании лога */
-                        case 1:
+                
+                        case 1: /* Произошла ошибка при создании лога */
                             diag_create_log();
                             finish();
                             break;
@@ -427,8 +429,7 @@ int main(int argc, char *argv[]) {
             }
             break;
 
-        /* Аргументы неверные */
-        case 1:
+        case 1: /* Аргументы неверные */
             diag_check_args();
             finish();
             break;
