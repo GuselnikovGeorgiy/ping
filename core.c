@@ -21,14 +21,17 @@
 #include <limits.h>           // Константы определенные реализацией
 
 //
-// ДЕКЛАРАЦИЯ ПЕРЕМЕННЫХ
+// ДЕКЛАРАЦИЯ КОНСТАНТ
 //
-#define DEFAULT_PACKET_SIZE 64  // Размер отправляемого пакета по умолчанию
-#define PING_TIMEOUT    2       // Задержка пинга  --------------
+#define DEFAULT_PACKET_SIZE 64  // Размер отправляемого пакета по умолчанию в байтах
+#define PING_TIMEOUT    2       // Время ожидания на получение одного запроса в секундах
 #define DEFAULT_COUNT   4       // Количество запросов по умолчанию
-#define DEFAULT_SLEEP_TIME 1    // Еще какая-то задержка по умолчанию ------------
+#define DEFAULT_SLEEP_TIME 1    // Задержка между получением запроса и отправки нового в секундах
 
-int interrupted;  // что-то    --------------
+//
+// ДЕКЛАРАЦИЯ ГЛОБАЛЬНЫХ ПЕРЕМЕННЫХ
+//
+int interrupted;  // Флаг прерывания, 1 если пользователь приостановил программу
 int count;        // Количество запросов
 int loop;         // 1 если неограниченное кол-во запросов иначе 0
 char *path;       // Путь до лога
@@ -38,7 +41,7 @@ char *ipv4;       // ipv4 введенный пользователем
 // ДЕКЛАРАЦИЯ ПРОЦЕДУР
 //
 
-void sigint_handler(int sigint) // Функция для сигнала
+void sigint_handler(int sigint) // Функция для сигнала остановки
 {
     interrupted = 1;
 }
@@ -47,16 +50,16 @@ int validate_ip(const char *ip) // Функция проверки ipv4 на в�
 {
     regex_t regex;
     int result;
+    // Регулярное выражение для проверки ip-адреса
+    char *pattern = "^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"; 
 
-    char *pattern = "^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$";
-
-    result = regcomp(&regex, pattern, REG_EXTENDED);
+    result = regcomp(&regex, pattern, REG_EXTENDED);    // Компилируем выражение
     if (result) {
         fprintf(stderr, "Невозможно скомпилировать регулярное выражение\n");
         return -1;
     }
 
-    result = regexec(&regex, ip, 0, NULL, 0);
+    result = regexec(&regex, ip, 0, NULL, 0);           // Сравниваем строку с выражением
     regfree(&regex);
 
     if (!result) {
@@ -70,14 +73,17 @@ int validate_ip(const char *ip) // Функция проверки ipv4 на в�
     }
 }
 
-int is_int(const char *num) // Функция проверки на число
+int is_positive_int(const char *num)            // Функция проверки на целочисленный положительный тип
 {
-    char *endptr;
-    strtol(num, &endptr, 10);
-
-    if ((errno == ERANGE && (strtol(num, NULL, 10) == LONG_MAX || strtol(num, NULL, 10) == LONG_MIN)) || (errno != 0 && strtol(num, NULL, 10)== 0))
+    if (num == NULL || *num == '\0') {          // Если число пустое
         return 1;
-    if (*endptr == '\0')
+    }
+    char *endptr;
+    long value = strtol(num, &endptr, 10);
+
+    if (errno == ERANGE || value <= 0)          // Если выходит за пределы или неположительное
+        return 1;
+    if (*endptr == '\0')                        // Если конечный указатель равен концу строки
         return 0;
     return 1;
 }
@@ -87,56 +93,57 @@ int is_int(const char *num) // Функция проверки на число
 * int argc - количество аргументов
 * char *argv[] - аргументы
 */
-int check_args(int argc, char *argv[]) // Функция проверки входных аргументов
+int check_args(int argc, char *argv[])          // Функция проверки входных аргументов
 {
     // TODO: Добавить поинтеры
-    ipv4 = argv[1];
-
-    if (argc < 2 || argc > 4) {
-        printf("Usage: %s <IPv4> [log_dir] [num_count:int |-t]\n", argv[0]);
+    if (argc < 2 || argc > 4) {                 // Проверяем количество поступивших аргументов
+        printf("Usage: %s <IPv4> [log_dir] [num_count:int | -t]\n", argv[0]);
         return -1;
     }
     
     int flag_count = 0;
     int flag_loop = 0;
     int flag_log = 0;
+    ipv4 = argv[1];
 
-    if (validate_ip(ipv4) == 0) {
-        for (int i=2; i < argc; ++i) {
-            if (strcmp(argv[i], "-t") == 0) {
+    if (validate_ip(ipv4) == 0) {                // Запускаем проверку ip
+        for (int i=2; i < argc; ++i) {           // Запускаем цикл проверки аргументов
+            if (strcmp(argv[i], "-t") == 0) {    // Флаг цикла
                 if (!flag_loop & !flag_count) {
                     loop = 1;
                     flag_loop = 1;
                     continue;
                 }
                 else {
-                    printf("Недопустимое значение: %s.\n", argv[i]);
+                    printf("Недопустимое значение: %s.\n", argv[i]);  // Ошибка при повторном обнаружении
                     return 1;
                 }
-            } else if (is_int(argv[i]) == 0) {
+            } else if (is_positive_int(argv[i]) == 0) {  // Число запросов
                 if (!flag_count & !flag_loop) {
                     count = atoi(argv[i]);
                     flag_count = 1;
                     continue;
                 } else {
-                    printf("Недопустимое значение: %s.\n", argv[i]);
+                    printf("Недопустимое значение: %s.\n", argv[i]); // Ошибка при повторном обнаружении
                     return 1;
                 }
-            } else if (access(argv[i], W_OK) != -1 && access(argv[i], F_OK) != -1) {
+            } else if (access(argv[i], W_OK) != -1 && access(argv[i], F_OK) != -1) {  // Поиск и проверка на доступность файла для лога
                 if (!flag_log) {
                     path = argv[i];
-                    printf("Write log to: %s\n", argv[i]);
                     flag_log++;
                     continue;
+                } else {
+                    printf("Недопустимое значение: %s.\n", argv[i]); // Ошибка при повторном обнаружении
+                    return 1;
                 }
             }
-
         }
+        // Если файл лога был задан, но флаг лога равен 0, то выводим ошибку
         if ((argc > 3 && !flag_log && (flag_count || flag_loop)) || (!flag_log && argc > 2 && (!flag_count && !flag_loop))) {
             printf("Файл недоступен или не существует.\n");
             return 1;
         }
-
+        printf("Write log to: %s\n", path);
         return 0;
     }
 
@@ -227,7 +234,6 @@ int send_request(int sockfd, struct sockaddr_in *addr, int seq_num) // Функ�
         perror("Ошибка отправки запроса к адресу: send_request");
         return 1;
     }
-
     return 0;
 }
 
@@ -244,6 +250,7 @@ int receive_response(int sockfd, struct sockaddr_in *addr, int seq_num) // Фу�
     // Получение ответа от хоста
     int bytes_received = recvfrom(sockfd, buffer, DEFAULT_PACKET_SIZE, 0, (struct sockaddr *)&response_addr, &response_addr_len);
     if (bytes_received < 0) {
+        printf("Request timed out...\n");
         return -1;
     }
     
@@ -338,12 +345,11 @@ int requests_loop() // Функция главного цикла пинга
 
         switch(receive_response(sockfd, &addr, seq_num)) {
             case 0:
-                ++packets_received;
+                ++packets_received; // Ответ получен
                 break;
-            case -1:
-                printf("Request timed out...\n");
+            case -1:                // Timeout
                 break;
-            default:
+            default:                // Ошибка при получении
                 return 1;
         }
 
