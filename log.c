@@ -1,7 +1,10 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <time.h>
+//
+// ДЕКЛАРАЦИЯ БИБЛИОТЕК
+//
+#include <stdio.h>            // фукнции ввода/вывода
+#include <stdlib.h>           // Cтандартные определения
+#include <string.h>           // Cтроковые операции
+#include <time.h>             // Функции работы с датой и временем
 
 const char* logName = "logfile.txt";
 
