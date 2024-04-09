@@ -1,24 +1,22 @@
 //
 // ДЕКЛАРАЦИЯ БИБЛИОТЕК
 //
-#include <stdio.h>            // фукнции ввода/вывода
-#include <stdlib.h>           // Cтандартные определения
+#include <stdio.h>            // Фукнции ввода/вывода
+#include <stdlib.h>           // Функции выделения памяти
 #include <string.h>           // Cтроковые операции
-#include <unistd.h>           // Cтандартные символьные константы и типы
-#include <sys/socket.h>       // Основные типы и структуры для работы с сокетами
+#include <unistd.h>           // Для работы с POSIX
+#include <sys/socket.h>       // Для работы с сокетами
 #include <netinet/in.h>       // Семейство интернет-адресов
-#include <netinet/ip.h>       // Дополняет семейство интернет-адресов
-#include <netinet/ip_icmp.h>  // Дополняет семейство интернет-адресов типами для icmp прокола
+#include <netinet/ip.h>       // Для работы с IP
+#include <netinet/ip_icmp.h>  // Для работы с ICMP
 #include <arpa/inet.h>        // Определения интернет операций
-#include <netdb.h>            // Определения для операций с сетевойо базой данных
+#include <netdb.h>            // Определения для операций с сетевой базой данных
 #include <sys/time.h>         // Функции и типы для работы со временем 
 #include <signal.h>           // Функции и типы для работы с сигналами
 #include <regex.h>            // Функции и типы для работы с регулярными выражениями
-#include <ctype.h>            // Функции для работы с типами данных
 #include <errno.h>            // Коды ошибок
 #include <stdint.h>           // Целочисленные типы
-#include <stdbool.h>          // Булевые типы и значения
-#include <limits.h>           // Константы определенные реализацией
+#include <limits.h>           // Константы лимитов
 
 //
 // ДЕКЛАРАЦИЯ КОНСТАНТ
@@ -40,7 +38,6 @@ char *ipv4;       // ipv4 введенный пользователем
 //
 // ДЕКЛАРАЦИЯ ПРОЦЕДУР
 //
-
 void sigint_handler(int sigint) // Функция для сигнала остановки
 {
     interrupted = 1;
@@ -48,6 +45,7 @@ void sigint_handler(int sigint) // Функция для сигнала оста
 
 int validate_ip(const char *ip) // Функция проверки ipv4 на валидность
 {
+    // printf("Вход в validate_ip\n");                  // DEBUG
     regex_t regex;
     int result;
     // Регулярное выражение для проверки ip-адреса
@@ -63,28 +61,36 @@ int validate_ip(const char *ip) // Функция проверки ipv4 на в�
     regfree(&regex);
 
     if (!result) {
+        // printf("Выход из validate_ip, 0\n");          // DEBUG
         return 0; // соответствует IPv4
     } else if (result == REG_NOMATCH) {
+        // printf("Выход из validate_ip, 1\n");          // DEBUG
         printf("Задан неверный IP\n");
         return 1;
     } else {
+        // printf("Выход из validate_ip, -1\n");         // DEBUG
         fprintf(stderr, "Ошибка при работе с регулярным выражением\n");
         return -1;
     }
 }
 
-int is_positive_int(const char *num)            // Функция проверки на целочисленный положительный тип
+int is_positive_int(const char *num)                 // Функция проверки на целочисленный положительный тип
 {
-    if (num == NULL || *num == '\0') {          // Если число пустое
+    // printf("Вход в is_positive_int\n");           // DEBUG
+    if (num == NULL || *num == '\0') {               // Если число пустое
         return 1;
     }
     char *endptr;
     long value = strtol(num, &endptr, 10);
 
-    if (errno == ERANGE || value <= 0)          // Если выходит за пределы или неположительное
+    if (errno == ERANGE || value <= 0)               // Если выходит за пределы или неположительное
+        // printf("Выход из is_positive_int, 1\n");   // DEBUG
         return 1;
-    if (*endptr == '\0')                        // Если конечный указатель равен концу строки
+    if (*endptr == '\0')                             // Если конечный указатель равен концу строки
+        // printf("Выход из is_positive_int, 0\n");   // DEBUG
         return 0;
+
+    // printf("Выход из is_positive_int, 1\n");       // DEBUG
     return 1;
 }
 
@@ -95,9 +101,10 @@ int is_positive_int(const char *num)            // Функция проверк
 */
 int check_args(int argc, char *argv[])          // Функция проверки входных аргументов
 {
-    // TODO: Добавить поинтеры
+    // printf("Вход в check_args\n");           // DEBUG
     if (argc < 2 || argc > 4) {                 // Проверяем количество поступивших аргументов
         printf("Usage: %s <IPv4> [log_dir] [num_count:int | -t]\n", argv[0]);
+        // printf("Выход из check_args, -1\n")  // DEBUG
         return -1;
     }
     
@@ -116,6 +123,7 @@ int check_args(int argc, char *argv[])          // Функция проверк
                 }
                 else {
                     printf("Недопустимое значение: %s.\n", argv[i]);  // Ошибка при повторном обнаружении
+                    // printf("Выход из check_args, 1\n")             // DEBUG
                     return 1;
                 }
             } else if (is_positive_int(argv[i]) == 0) {  // Число запросов
@@ -125,6 +133,7 @@ int check_args(int argc, char *argv[])          // Функция проверк
                     continue;
                 } else {
                     printf("Недопустимое значение: %s.\n", argv[i]); // Ошибка при повторном обнаружении
+                    // printf("Выход из check_args, 1\n")            // DEBUG
                     return 1;
                 }
             } else if (access(argv[i], W_OK) != -1 && access(argv[i], F_OK) != -1) {  // Поиск и проверка на доступность файла для лога
@@ -134,6 +143,7 @@ int check_args(int argc, char *argv[])          // Функция проверк
                     continue;
                 } else {
                     printf("Недопустимое значение: %s.\n", argv[i]); // Ошибка при повторном обнаружении
+                    // printf("Выход из check_args, 1\n")            // DEBUG
                     return 1;
                 }
             }
@@ -141,52 +151,70 @@ int check_args(int argc, char *argv[])          // Функция проверк
         // Если файл лога был задан, но флаг лога равен 0, то выводим ошибку
         if ((argc > 3 && !flag_log && (flag_count || flag_loop)) || (!flag_log && argc > 2 && (!flag_count && !flag_loop))) {
             printf("Файл недоступен или не существует.\n");
+            // printf("Выход из check_args, 1\n")                    // DEBUG
             return 1;
         }
         printf("Write log to: %s\n", path);
+        // printf("Выход из check_args, 0\n")                        // DEBUG
         return 0;
     }
 
+    // printf("Выход из check_args, 0\n")                            // DEBUG
     return 1;
 }
 
 int diag_check_args() // Функция диагностики проверки аргументов
 {
+    // printf("Вход в diag_check_args\n")          // DEBUG 
+    // printf("Выход из diag_check_args, 0\n")     // DEBUG 
     return 0;
 }
 
 int check_log() // Функция проверки наличия лога
 {
+    // printf("Вход в check_log\n")                // DEBUG 
+    // printf("Выход из check_log, 0\n")           // DEBUG 
     return 0;
 }
 
 int diag_check_log() // Функция диагностики проверки наличия лога
 {
+    // printf("Вход в diag_check_log\n")           // DEBUG 
+    // printf("Выход из diag_check_log, 0\n")      // DEBUG 
     return 0;
 }
 
 int write_log() // Функция записи в лог
 {
+    // printf("Вход в write_log\n")                // DEBUG 
+    // printf("Выход из write_log, 0\n")           // DEBUG 
     return 0;
 }
 
 int create_log() // Функция создания лога
 {
+    // printf("Вход в create_log\n")               // DEBUG 
+    // printf("Выход из create_log, 0\n")          // DEBUG 
     return 0;
 }
 
 int diag_create_log() // Функция диагностики создания лога
 {
+    // printf("Вход в diag_create_log\n")          // DEBUG 
+    // printf("Выход из diag_create_log, 0\n")     // DEBUG 
     return 0;
 }
 
 void finish() // Функция завершения программы
 {
+    // printf("Вход в finish\n")                   // DEBUG 
+    // printf("Выход из finish, 0\n")              // DEBUG 
     exit(0);
 }
 
 unsigned short checksum(void *b, int len) // Функция проверки контрольной суммы ICMP пакета
 {   
+    // printf("Вход в checksum\n")                   // DEBUG 
     unsigned short *buf = b;
     unsigned int sum = 0;
     unsigned short result;
@@ -201,6 +229,7 @@ unsigned short checksum(void *b, int len) // Функция проверки к�
     sum += (sum >> 16);
     result = ~sum;
 
+    // printf("Выход из checksum, 0\n")              // DEBUG 
     return result;
 }
 
@@ -212,6 +241,7 @@ unsigned short checksum(void *b, int len) // Функция проверки к�
 */
 int send_request(int sockfd, struct sockaddr_in *addr, int seq_num) // Функция отправки icmp запроса
 {
+    // printf("Вход в send_request\n")                       // DEBUG 
     // Создаем буфер для ICMP пакета в виде структуры,
     char packet[DEFAULT_PACKET_SIZE];
     memset(packet, 0, DEFAULT_PACKET_SIZE);
@@ -232,13 +262,16 @@ int send_request(int sockfd, struct sockaddr_in *addr, int seq_num) // Функ�
     // Отправляем запрос
     if (sendto(sockfd, packet, DEFAULT_PACKET_SIZE, 0, (struct sockaddr *)addr, sizeof(*addr)) == -1) {
         perror("Ошибка отправки запроса к адресу: send_request");
+        // printf("Выход из send_request, 1\n")              // DEBUG 
         return 1;
     }
+    // printf("Выход из send_request, 0\n")                  // DEBUG 
     return 0;
 }
 
 int receive_response(int sockfd, struct sockaddr_in *addr, int seq_num) // Функция получения icmp запроса
 {
+    // printf("Вход в receive_response\n")                       // DEBUG 
     // Буфер
     char buffer[DEFAULT_PACKET_SIZE];
     memset(buffer, 0, DEFAULT_PACKET_SIZE);
@@ -251,12 +284,14 @@ int receive_response(int sockfd, struct sockaddr_in *addr, int seq_num) // Фу�
     int bytes_received = recvfrom(sockfd, buffer, DEFAULT_PACKET_SIZE, 0, (struct sockaddr *)&response_addr, &response_addr_len);
     if (bytes_received < 0) {
         printf("Request timed out...\n");
+        // printf("Выход из receive_response, -1\n")             // DEBUG 
         return -1;
     }
     
     // Проверка, что ответ пришел не от целевого хоста (крайне маловероятно)
     if (response_addr.sin_addr.s_addr != addr->sin_addr.s_addr) {
         printf("Получено сообщение не от целевого хоста\n");
+        // printf("Выход из receive_response, 1\n")              // DEBUG 
         return 1;
     }
 
@@ -279,24 +314,29 @@ int receive_response(int sockfd, struct sockaddr_in *addr, int seq_num) // Фу�
                bytes_received, inet_ntoa(response_addr.sin_addr), icmp_packet->icmp_seq, ip_header->ttl, rtt);
     } else {
         printf("Получен непредвиденный ICMP ответ\n");
+        // printf("Выход из receive_response, -2\n")             // DEBUG 
         return -2;
     }
 
+    // printf("Выход из receive_response, 0\n")                  // DEBUG 
     return 0;
 }
 
 int print_statisctics(int packets_sent, int packets_received, double total_time) // Функция вывода статистики
 {
+    // printf("Вход в print_statisctics\n")                      // DEBUG 
     printf("\n--- Ping statistics ---\n");
     printf("%d packets transmitted, %d received, %.2f packet loss, time %.2fms\n",
            packets_sent, packets_received, 
            ((double)(packets_sent - packets_received) / packets_sent) * 100, total_time);
     
+    // printf("Выход из print_statisctics, 0\n")                 // DEBUG 
     return 0;
 }
 
 int requests_loop() // Функция главного цикла пинга
 {
+    // printf("Вход в requests_loop\n")                          // DEBUG 
     signal(SIGINT, sigint_handler);
 
     int sockfd; // Дескриптор сокета
@@ -312,6 +352,7 @@ int requests_loop() // Функция главного цикла пинга
     // Создаем сокет для общения с хостом
     if ((sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) < 0) {
         perror("socket");
+        // printf("Выход из requests_loop, 1\n")                 // DEBUG 
         return 1;
     }
 
@@ -328,6 +369,7 @@ int requests_loop() // Функция главного цикла пинга
     timeout.tv_usec = 0;
     if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout)) < 0) {
         perror("setsockopt");
+        // printf("Выход из requests_loop, 1\n")                 // DEBUG 
         return 1;
     }
 
@@ -350,6 +392,7 @@ int requests_loop() // Функция главного цикла пинга
             case -1:                // Timeout
                 break;
             default:                // Ошибка при получении
+                // printf("Выход из requests_loop, 1\n")         // DEBUG 
                 return 1;
         }
 
@@ -368,65 +411,68 @@ int requests_loop() // Функция главного цикла пинга
     print_statisctics(packets_sent, packets_received, total_time);
 
     close(sockfd);
+    // printf("Выход из requests_loop, 0\n")                 // DEBUG 
     return 0;
 }
 
 int diag_requests_loop() // Функция диагностики цикла запросов
 {
+    // printf("Вход в diag_requests_loop\n")                 // DEBUG 
+    // printf("Выход из diag_requests_loop, 0\n")            // DEBUG 
     return 0;
 }
 
 int main(int argc, char *argv[]) // Главная функция программы
 {
-
-    // Инициализация переменных
+    // printf("Вход в main\n")                        // DEBUG 
+    // ИНИЦИАЛИЗАЦИЯ ПЕРЕМЕННЫХ
     count = DEFAULT_COUNT;
     loop = 0;
     path = "";
     ipv4 = "";
 
-    // Тело процедуры
-    switch(check_args(argc, argv)) /* Проверка аргументов */ 
+    // ТЕЛО ПРОЦЕДУРЫ
+    switch(check_args(argc, argv))                    /* Проверка аргументов */ 
     {
-        case 0: /* Аргументы верные */
-            switch(check_log()) /* Проверка наличия лога */
+        case 0:                                       /* Аргументы верные */
+            switch(check_log())                       /* Проверка наличия лога */
             { 
-                case 0: /* Лог есть, ничего делать не надо */     
-                    switch (requests_loop(ipv4, count, loop))
+                case 0:                               /* Лог есть, ничего делать не надо */     
+                    switch (requests_loop())
                     {
-                        case 0: /* Конец */
+                        case 0:                       /* Завершение программы */
                             finish();
                             break;
 
-                        case 1: /* Критическая ошибка при отправке запросов */
+                        case 1:                       /* Критическая ошибка при отправке запросов */
                             diag_requests_loop();
                             finish();
                             break;
                     }
                 
-                case 1: /* Не удалось проверить наличие лога */
+                case 1:                                /* Не удалось проверить наличие лога */
                     diag_check_log();
                     finish();
                     break;
 
-                case 2: /* Нужно создать лог */
-                    switch (create_log()) /* Создание лога */
+                case 2:                                /* Нужно создать лог */
+                    switch (create_log())           
                     {
-                        case 0: /* Лог успешно создан */
-                            switch (requests_loop(ipv4, count, loop)) /* Цикл запросов */
+                        case 0:                       /* Лог успешно создан */
+                            switch (requests_loop()) 
                             {
-                                case 0: /* Конец */
+                                case 0:               /* Завершение программы */
                                     finish();
                                     break;
 
-                                case 1: /* Критическая ошибка при отправке запросов */
+                                case 1:               /* Критическая ошибка при отправке запросов */
                                     diag_requests_loop();
                                     finish();
                                     break;
                             }
                             break;
                 
-                        case 1: /* Произошла ошибка при создании лога */
+                        case 1:                       /* Произошла ошибка при создании лога */
                             diag_create_log();
                             finish();
                             break;
@@ -435,11 +481,12 @@ int main(int argc, char *argv[]) // Главная функция програм
             }
             break;
 
-        case 1: /* Аргументы неверные */
+        case 1:                                       /* Аргументы неверные */
             diag_check_args();
             finish();
             break;
     }
     
+    // printf("Выход из main\n")                      // DEBUG
     return 0;
 }
