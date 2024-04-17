@@ -25,7 +25,7 @@ int DEFAULT_PACKET_SIZE;      // Размер отправляемого пак�
 int PING_TIMEOUT;             // Время ожидания на получение одного запроса в секундах
 int DEFAULT_SLEEP_TIME;       // Задержка между получением запроса и отправки нового в секундах
 int count;                    // Количество запросов
-int loop;                     // 1 если неограниченное кол-во запросов иначе 0
+int loop;                     // 1 если неограниченное кол-во запросов, иначе 0
 char *path;                   // Путь до лога
 char *ipv4;                   // ipv4 введенный пользователем
 int sockfd;                   // Дескриптор сокета
@@ -37,10 +37,11 @@ struct sockaddr_in addr;      // Адрес
 int validate_ip(const char *ip) // Функция проверки ipv4 на валидность
 {
     // printf("Вход в validate_ip\n");                  // DEBUG
-    regex_t regex;
+    regex_t regex;  // pattern buffer
     int result;
+    char *pattern;  // regex pattern
     // Регулярное выражение для проверки ip-адреса
-    char *pattern = "^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"; 
+    pattern = "^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"; 
 
     result = regcomp(&regex, pattern, REG_EXTENDED);    // Компилируем выражение
     if (result) {
@@ -318,7 +319,7 @@ int receive_response(int seq_num) // Функция получения icmp за
 int print_statisctics(struct timeval start_time, struct timeval end_time, int packets_sent, int packets_received) // Функция вывода статистики
 {
     // printf("Вход в print_statisctics\n")                      // DEBUG 
-    int total_time;
+    double total_time;
     gettimeofday(&end_time, NULL);
     total_time = (double)(end_time.tv_sec - start_time.tv_sec) * 1000 +
                  (double)(end_time.tv_usec - start_time.tv_usec) / 1000;
@@ -332,11 +333,10 @@ int print_statisctics(struct timeval start_time, struct timeval end_time, int pa
     return 0;
 }
 
-int sigint_handler()
+void sigint_handler()
 {
     // print_statisctics();
     finish();
-    return 0;
 }
 
 int init_socket() {
@@ -392,20 +392,25 @@ int main(int argc, char *argv[]) // Главная функция програм
     // printf("Вход в main\n")                        // DEBUG 
 
     // Инициализация переменных
+    int seq_num;
+    int packets_sent;
+    int packets_received;
+    struct timeval start_time;
+    struct timeval end_time;
+    double total_time;
+
+    // Присвоения
+    seq_num = 0;
+    packets_sent = 0;
+    packets_received = 0;
+    total_time = 0.0;
     DEFAULT_PACKET_SIZE = 64;
     PING_TIMEOUT = 2;
     DEFAULT_SLEEP_TIME = 1;
     count = 4;
     loop = 0;
     path = "";
-    ipv4 = "";
-
-    int seq_num = 0;
-    int packets_sent = 0;
-    int packets_received = 0;
-    struct timeval start_time;
-    struct timeval end_time;
-    double total_time = 0; 
+    ipv4 = ""; 
 
     // Тело процедуры
     switch(check_args(argc, argv))                                 /* Проверка аргументов */ 
@@ -435,10 +440,9 @@ int main(int argc, char *argv[]) // Главная функция програм
                                                 ++packets_received;
                                                 break;
                                                 
-                                            case 1:                /* Ответ не получен, завершаем цикл */ 
-                                                print_statisctics(start_time, end_time, packets_sent, packets_received);
-                                                finish();
-                                                break;
+                                            case 1:                /* Ответ не получен */ 
+                                                // writelog;
+                                            
                                         }
                                         break;
 
