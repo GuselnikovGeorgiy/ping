@@ -68,14 +68,16 @@ void finish() // Функция завершения программы
 
 int validate_ip(const char *ip) // Функция проверки ipv4 на валидность
 {
-    // printf("Вход в validate_ip\n");                   // DEBUG
+    // printf("Вход в validate_ip\n");                  // DEBUG
 
+    const char * ip_address;
     regex_t regex;  // pattern buffer
     int result;     // Результат
     char *pattern;  // regex pattern
-
+    
     // Регулярное выражение для проверки ip-адреса
-    pattern = "^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"; 
+    pattern = "^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$";
+    ip_address = ip; 
 
     result = regcomp(&regex, pattern, REG_EXTENDED);     // Компилируем выражение
     if (result) {
@@ -83,7 +85,7 @@ int validate_ip(const char *ip) // Функция проверки ipv4 на в�
         return -1;
     }
 
-    result = regexec(&regex, ip, 0, NULL, 0);            // Сравниваем строку с выражением
+    result = regexec(&regex, ip_address, 0, NULL, 0);           // Сравниваем строку с выражением
     regfree(&regex);
 
     if (!result) {
@@ -100,19 +102,21 @@ int validate_ip(const char *ip) // Функция проверки ipv4 на в�
     }
 }
 
-int is_positive_int(const char *num)                  // Функция проверки на целочисленный положительный тип
-{
+int is_positive_int(const char *n)                  // Функция проверки на целочисленный положительный тип
+{   
     // printf("Вход в is_positive_int\n");            // DEBUG
 
+    const char *num;
     char *endptr;
-    long value;
 
+    num = n;
+    
     if (num == NULL || *num == '\0') {                // Если число пустое
         // printf("Выход из is_positive_int, 1\n");   // DEBUG
         return 1;
     }
     
-    strtol(num, &endptr, 10);
+    long value = strtol(num, &endptr, 10);
 
     if (errno == ERANGE || value <= 0)                // Если выходит за пределы или неположительное
         // printf("Выход из is_positive_int, 1\n");   // DEBUG
@@ -125,61 +129,67 @@ int is_positive_int(const char *num)                  // Функция пров
     return 1;
 }
 
-int check_args(int argc, char *argv[])                // Функция проверки входных аргументов
-{
+int check_args(int argc, char *argv[])          // Функция проверки входных аргументов
+{   
     // printf("Вход в check_args\n");                 // DEBUG
 
-    // int argc - количество аргументов
-    // char *argv[] - аргументы
+    int flag_count;
+    int flag_loop;
+    int flag_log;
+    int arg_counter;
+    char **arg_vector;
 
-    if (argc < 2 || argc > 4) {                       // Проверяем количество поступивших аргументов
+    if (argc < 2 || argc > 4) {                 // Проверяем количество поступивших аргументов
         printf("Usage: %s <IPv4> [log_dir] [num_count:int | -t]\n", argv[0]);
         // printf("Выход из check_args, -1\n");       // DEBUG
         return -1;
     }
     
-    int flag_count = 0;
-    int flag_loop = 0;
-    int flag_log = 0;
-    ipv4 = argv[1];
+    flag_count = 0;
+    flag_loop = 0;
+    flag_log = 0;
+    ipv4 = argv[1];                              // Глобальная переменная: ip
+    arg_counter = argc;                              
+    arg_vector = argv;
+
 
     if (validate_ip(ipv4) == 0) {                // Запускаем проверку ip
-        for (int i=2; i < argc; ++i) {           // Запускаем цикл проверки аргументов
-            if (strcmp(argv[i], "-t") == 0) {    // Флаг цикла
+        for (int i = 2; i < arg_counter; ++i) {           // Запускаем цикл проверки аргументов
+            if (strcmp(arg_vector[i], "-t") == 0) {    // Флаг цикла
                 if (!flag_loop & !flag_count) {
                     loop = 1;
                     flag_loop = 1;
                     continue;
                 }
                 else {
-                    printf("Недопустимое значение: %s.\n", argv[i]);  // Ошибка при повторном обнаружении
-                    // printf("Выход из check_args, 1\n");       // DEBUG
+                    printf("Недопустимое значение: %s.\n", arg_vector[i]);  // Ошибка при повторном обнаружении
+                    // printf("Выход из check_args, 1\n")             // DEBUG
                     return 1;
                 }
-            } else if (is_positive_int(argv[i]) == 0) {  // Число запросов
+            } else if (is_positive_int(arg_vector[i]) == 0) {  // Число запросов
                 if (!flag_count & !flag_loop) {
-                    count = atoi(argv[i]);
+                    count = atoi(arg_vector[i]);
                     flag_count = 1;
                     continue;
                 } else {
-                    printf("Недопустимое значение: %s.\n", argv[i]); // Ошибка при повторном обнаружении
-                    // printf("Выход из check_args, 1\n");       // DEBUG
+                    printf("Недопустимое значение: %s.\n", arg_vector[i]); // Ошибка при повторном обнаружении
+                    // printf("Выход из check_args, 1\n")            // DEBUG
                     return 1;
                 }
-            } else if (access(argv[i], W_OK) != -1 && access(argv[i], F_OK) != -1) {  // Поиск и проверка на доступность файла для лога
+            } else if (access(arg_vector[i], W_OK) != -1 && access(arg_vector[i], F_OK) != -1) {  // Поиск и проверка на доступность файла для лога
                 if (!flag_log) {
-                    path = argv[i];
+                    path = arg_vector[i];
                     flag_log++;
                     continue;
                 } else {
-                    printf("Недопустимое значение: %s.\n", argv[i]); // Ошибка при повторном обнаружении
-                    // printf("Выход из check_args, 1\n");       // DEBUG
+                    printf("Недопустимое значение: %s.\n", arg_vector[i]); // Ошибка при повторном обнаружении
+                    // printf("Выход из check_args, 1\n")            // DEBUG
                     return 1;
                 }
             }
         }
         // Если файл лога был задан, но флаг лога равен 0, то выводим ошибку
-        if ((argc > 3 && !flag_log && (flag_count || flag_loop)) || (!flag_log && argc > 2 && (!flag_count && !flag_loop))) {
+        if ((arg_counter > 3 && !flag_log && (flag_count || flag_loop)) || (!flag_log && arg_counter > 2 && (!flag_count && !flag_loop))) {
             printf("Файл недоступен или не существует.\n");
             // printf("Выход из check_args, 1\n");               // DEBUG
             return 1;
@@ -239,6 +249,9 @@ int send_request(int f_seq_num) // Функция отправки ICMP запр
     int seq_num;                      // Порядковый номер пакета
     char packet[DEFAULT_PACKET_SIZE]; // Буфер для ICMP пакета
     struct icmp *icmp_packet;         // ICMP пакет
+    int packets_sent;
+
+    packets_sent = sent;
 
     // Инициализация переменных
     seq_num = f_seq_num;
