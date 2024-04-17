@@ -28,15 +28,8 @@ int count;                    // Количество запросов
 int loop;                     // 1 если неограниченное кол-во запросов иначе 0
 char *path;                   // Путь до лога
 char *ipv4;                   // ipv4 введенный пользователем
-
-int sockfd;                 // Дескриптор сокета
-int seq_num;                // Порядковый номер пакета
-int packets_sent;           // Кол-во отправленных пакетов
-int packets_received;       // Кол-во полученных пакетов
-struct sockaddr_in addr;    // Адрес
-struct timeval start_time;  // Время старта отправки запросов
-struct timeval end_time;    // Время окончания отправки всех запросов
-double total_time;          // Общее время отправки всех запросов
+int sockfd;                   // Дескриптор сокета
+struct sockaddr_in addr;      // Адрес
 
 //
 // ДЕКЛАРАЦИЯ ПРОЦЕДУР
@@ -193,6 +186,8 @@ void finish() // Функция завершения программы
     exit(0);
 }
 
+
+
 unsigned short checksum(void *b, int f_len) // Функция проверки контрольной суммы ICMP пакета
 {   
     // printf("Вход в checksum\n")                 // DEBUG 
@@ -224,7 +219,7 @@ unsigned short checksum(void *b, int f_len) // Функция проверки �
     return result;
 }
 
-int send_request() // Функция отправки ICMP запроса
+int send_request(int packets_sent, int seq_num) // Функция отправки ICMP запроса
 {
     // printf("Вход в send_request\n");                          // DEBUG 
 
@@ -263,7 +258,7 @@ int send_request() // Функция отправки ICMP запроса
     return 0;
 }
 
-int receive_response() // Функция получения icmp запроса
+int receive_response(int seq_num) // Функция получения icmp запроса
 {
     // printf("Вход в receive_response\n");                       // DEBUG 
 
@@ -306,8 +301,6 @@ int receive_response() // Функция получения icmp запроса
         // Вычисление round-trip time (дельта t2-t1)
         double rtt = (received_time.tv_sec - sent_time->tv_sec) * 1000.0 + 
                     (received_time.tv_usec - sent_time->tv_usec) / 1000.0;
-        
-        ++packets_received;
 
         // Вывод информации о пакете
         printf("%d bytes from %s: icmp_seq=%d ttl=%d time=%.2f ms\n",
@@ -322,9 +315,10 @@ int receive_response() // Функция получения icmp запроса
     return 0;
 }
 
-int print_statisctics() // Функция вывода статистики
+int print_statisctics(struct timeval start_time, struct timeval end_time, int packets_sent, int packets_received) // Функция вывода статистики
 {
     // printf("Вход в print_statisctics\n")                      // DEBUG 
+    int total_time;
     gettimeofday(&end_time, NULL);
     total_time = (double)(end_time.tv_sec - start_time.tv_sec) * 1000 +
                  (double)(end_time.tv_usec - start_time.tv_usec) / 1000;
@@ -338,10 +332,17 @@ int print_statisctics() // Функция вывода статистики
     return 0;
 }
 
+int sigint_handler()
+{
+    // print_statisctics();
+    finish();
+    return 0;
+}
+
 int init_socket() {
     // printf("Вход в init_socket\n")                      // DEBUG 
 
-    signal(SIGINT, finish);
+    signal(SIGINT, sigint_handler);
 
     if ((sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) < 0) {
         perror("socket");
@@ -354,7 +355,7 @@ int init_socket() {
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = inet_addr(ipv4);
 
-    gettimeofday(&start_time, NULL);
+    // gettimeofday(&start_time, NULL);
 
     // Устанавливаем таймаут для пинга
     struct timeval timeout;
@@ -399,10 +400,12 @@ int main(int argc, char *argv[]) // Главная функция програм
     path = "";
     ipv4 = "";
 
-    seq_num = 0;
-    packets_sent = 0;
-    packets_received = 0;
-    total_time = 0;
+    int seq_num = 0;
+    int packets_sent = 0;
+    int packets_received = 0;
+    struct timeval start_time;
+    struct timeval end_time;
+    double total_time = 0; 
 
     // Тело процедуры
     switch(check_args(argc, argv))                                 /* Проверка аргументов */ 
@@ -413,24 +416,27 @@ int main(int argc, char *argv[]) // Главная функция програм
                 case 0:                                            /* Лог инициализировался */ 
                     switch(init_socket())                          /* Инициализация сокета */  
                     {
-                        case 0:                                    /* Сокет успешно создался */     
+                        case 0:                                    /* Сокет успешно создался */
+                            gettimeofday(&start_time, NULL);
+
                             while (1)                              /* Цикл с запросами начался */
                             {
-                                switch(send_request())             /* Отправка запроса */ 
+                                switch(send_request(packets_sent, seq_num))             /* Отправка запроса */ 
                                 {
                                     case 2:                        /* Завершаем цикл */  
-                                        print_statisctics();
+                                        print_statisctics(start_time, end_time, packets_sent, packets_received);
                                         finish();
                                         break;
 
                                     case 0:                        /* Запрос успешно отправился */
-                                        switch(receive_response()) /* Получение ответа */
+                                        switch(receive_response(seq_num)) /* Получение ответа */
                                         {
                                             case 0:                /* Ответ успешно получен */ 
+                                                ++packets_received;
                                                 break;
                                                 
                                             case 1:                /* Ответ не получен, завершаем цикл */ 
-                                                print_statisctics();
+                                                print_statisctics(start_time, end_time, packets_sent, packets_received);
                                                 finish();
                                                 break;
                                         }
@@ -438,7 +444,7 @@ int main(int argc, char *argv[]) // Главная функция програм
 
                                     case 1:                        /* Запрос не отправился */
                                         diag_send_request();
-                                        print_statisctics();
+                                        print_statisctics(start_time, end_time, packets_sent, packets_received);
                                         write_log();
                                         finish();
                                         break;
