@@ -166,12 +166,12 @@ int is_positive_int(const char *n)                          // Функция п
 int check_args(int argc, char *argv[])                      // Функция проверки входных аргументов
 {   
     // printf("Вход в check_args\n");                       // DEBUG
-
-    int flag_count;
-    int flag_loop;
-    int flag_log;
-    int arg_counter;
-    char **arg_vector;
+                                                            // Флаги аргументов, 1 - если был передан, иначе 0.
+    int flag_count;                                         // Флаг количества запросов
+    int flag_loop;                                          // Флаг цикла
+    int flag_log;                                           // Флаг лога
+    int arg_counter;                                        // Количество переданных аргументов
+    char **arg_vector;                                      // Вектор (массив) аргументов
     
     flag_count = 0;
     flag_loop = 0;
