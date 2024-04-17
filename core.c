@@ -33,6 +33,8 @@ struct sockaddr_in addr;      // Адрес
 struct timeval start_time;    // Стартовой время отправки запросов
 int packets_sent;             // Кол-во отправленных пакетов
 int packets_received;         // Кол-во полученных пакетов
+int error_code;               // Код ошибки
+char log_msg[100];            // Сообщение для лога
 
 //
 // ДЕКЛАРАЦИЯ ПРОЦЕДУР
@@ -44,8 +46,9 @@ int init_log() // Функция инициализации лога
     return 0;
 }
 
-int write_log() // Функция записи в лог
+int write_log(char *msg) // Функция записи в лог
 {
+    printf("Имитация лога %s\n", msg);
     return 0;
 }
 
@@ -63,6 +66,37 @@ void finish() // Функция завершения программы
 
     // printf("Выход из finish, 0\n");              // DEBUG 
     exit(0);
+}
+
+int diag()
+{
+    // printf("Вход в diag\n");                                    // DEBUG 
+    switch(error_code) 
+    {
+        case 1:
+            sprintf(log_msg, "Ошибка отправки запроса к адресу");
+            break;
+        case 2:
+            sprintf(log_msg, "Request timeout");
+            break;
+        case 3:
+            sprintf(log_msg, "Получено сообщение не от целевого хоста");
+            break;
+        case 4:
+            sprintf(log_msg, "Получен непредвиденный ICMP ответ");
+            break;
+        case 5:
+            sprintf(log_msg, "Ошибка создания сокета");
+            break;
+        case 6:
+            sprintf(log_msg, "Ошибка изменения параметра сокета");
+            break;
+        default:
+            sprintf(log_msg, "Неизвестная ошибка");
+    }
+
+    // printf("Выход из diag, 0\n");                               // DEBUG 
+    return 0;
 }
 
 
@@ -92,12 +126,12 @@ int validate_ip(const char *ip) // Функция проверки ipv4 на в�
         // printf("Выход из validate_ip, 0\n");          // DEBUG
         return 0; // соответствует IPv4
     } else if (result == REG_NOMATCH) {
-        // printf("Выход из validate_ip, 1\n");          // DEBUG
         printf("Задан неверный IP\n");
+        // printf("Выход из validate_ip, 1\n");          // DEBUG
         return 1;
     } else {
-        // printf("Выход из validate_ip, -1\n");         // DEBUG
         fprintf(stderr, "Ошибка при работе с регулярным выражением\n");
+        // printf("Выход из validate_ip, -1\n");         // DEBUG
         return -1;
     }
 }
@@ -203,13 +237,6 @@ int check_args(int argc, char *argv[])          // Функция проверк
     return 1;
 }
 
-int diag_check_args() // Функция диагностики проверки аргументов
-{
-    // printf("Вход в diag_check_args\n")                        // DEBUG 
-    // printf("Выход из diag_check_args, 0\n")                   // DEBUG 
-    return 0;
-}
-
 unsigned short checksum(void *b, int f_len) // Функция проверки контрольной суммы ICMP пакета
 {   
     // printf("Вход в checksum\n");                              // DEBUG 
@@ -249,9 +276,6 @@ int send_request(int f_seq_num) // Функция отправки ICMP запр
     int seq_num;                      // Порядковый номер пакета
     char packet[DEFAULT_PACKET_SIZE]; // Буфер для ICMP пакета
     struct icmp *icmp_packet;         // ICMP пакет
-    int packets_sent;
-
-    packets_sent = sent;
 
     // Инициализация переменных
     seq_num = f_seq_num;
@@ -278,17 +302,12 @@ int send_request(int f_seq_num) // Функция отправки ICMP запр
 
     // Отправляем запрос
     if (sendto(sockfd, packet, DEFAULT_PACKET_SIZE, 0, (struct sockaddr *)&addr, sizeof(addr)) == -1) {
-        perror("Ошибка отправки запроса к адресу: send_request");
+        error_code = 1;
         // printf("Выход из send_request, 1\n");                   // DEBUG 
         return 1;
     }
 
     // printf("Выход из send_request, 0\n");                       // DEBUG 
-    return 0;
-}
-
-int diag_send_request() // Функция диагностики отправления запроса
-{
     return 0;
 }
 
@@ -317,14 +336,14 @@ int receive_response(int f_seq_num) // Функция получения icmp з
     bytes_received = recvfrom(sockfd, buffer, DEFAULT_PACKET_SIZE, 0, (struct sockaddr *)&response_addr, &response_addr_len);
 
     if (bytes_received < 0) {
-        printf("Request timed out...\n");
+        error_code = 2;
         // printf("Выход из receive_response, 1\n");               // DEBUG 
         return 1;
     }
     
     // Проверка, что ответ пришел не от целевого хоста (крайне маловероятно)
     if (response_addr.sin_addr.s_addr != addr.sin_addr.s_addr) {
-        printf("Получено сообщение не от целевого хоста\n");
+        error_code = 3;
         // printf("Выход из receive_response, 1\n");               // DEBUG 
         return 1;
     }
@@ -347,7 +366,7 @@ int receive_response(int f_seq_num) // Функция получения icmp з
         printf("%d bytes from %s: icmp_seq=%d ttl=%d time=%.2f ms\n",
                bytes_received, inet_ntoa(response_addr.sin_addr), icmp_packet->icmp_seq, ip_header->ttl, rtt);
     } else {
-        printf("Получен непредвиденный ICMP ответ\n");
+        error_code = 4;
         // printf("Выход из receive_response, 1\n");               // DEBUG 
         return 1;
     }
@@ -395,7 +414,7 @@ int init_socket() // Функция инициализации сокета
     signal(SIGINT, sigint_handler);
 
     if ((sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) < 0) {
-        perror("socket");
+        error_code = 5;
         // printf("Выход из init_socket, 1\n")                     // DEBUG 
         return 1;
     }
@@ -410,7 +429,7 @@ int init_socket() // Функция инициализации сокета
     timeout.tv_usec = 0;
 
     if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout)) < 0) {
-        perror("setsockopt");
+        error_code = 6;
         // printf("Выход из init_socket, 1\n");                    // DEBUG 
         return 1;
     }
@@ -420,11 +439,6 @@ int init_socket() // Функция инициализации сокета
     printf("Pinging %s, with %d bytes of data:\n", ipv4, DEFAULT_PACKET_SIZE);
 
     // printf("Выход из init_socket, 0\n");                        // DEBUG 
-    return 0;
-}
-
-int diag_init_socket() // Функция диагностики инициализации сокета
-{
     return 0;
 }
 
@@ -477,15 +491,16 @@ int main(int argc, char *argv[]) // Главная функция програм
                                                 break;
                                                 
                                             case 1:                /* Ответ не получен */ 
-                                                write_log();
+                                                diag();
+                                                write_log(log_msg);
                                                 break;
                                         }
                                         break;
 
                                     case 1:                        /* Запрос не отправился */
-                                        diag_send_request();
+                                        diag();
                                         print_statisctics();
-                                        write_log();
+                                        write_log(log_msg);
                                         finish();
                                         break;
                                 }
@@ -497,7 +512,8 @@ int main(int argc, char *argv[]) // Главная функция програм
                             break;
 
                         case 1:                                    /* Ошибка с сокетом */    
-                            diag_init_socket();
+                            diag();
+                            write_log(log_msg);
                             finish();
                             break;
                     }
@@ -510,12 +526,12 @@ int main(int argc, char *argv[]) // Главная функция програм
             break;
 
         case 1:                                                    /* Неверные аргументы */ 
-            diag_check_args();
+            diag();
 
             switch(init_log())                                     /* Инициализация лога */ 
             {
                 case 0:                                            /* Лог успешно инициализирован */  
-                    write_log();
+                    write_log(log_msg);
                     finish();
                     break;
 
