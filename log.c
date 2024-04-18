@@ -1,78 +1,200 @@
-//
-// ДЕКЛАРАЦИЯ БИБЛИОТЕК
-//
-#include <stdio.h>            // фукнции ввода/вывода
-#include <stdlib.h>           // Cтандартные определения
-#include <string.h>           // Cтроковые операции
-#include <time.h>             // Функции работы с датой и временем
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/stat.h>
+#include <sys/statvfs.h>    
+#include <string.h>
+#include <time.h>
 
-const char* logName = "logfile.txt";
+int error_code_log;
 
-// Функция обработки файла журнала
-int checkLog() {
-    FILE* f1 = fopen(logName, "a");
-    if (f1 == NULL) {
-        return 1;
+void finish_log(void) {
+    exit(0);
+}
+
+int OpenFileToLog(FILE *file_ptr, const char *path) {
+    // Открываем файл для записи ("a" означает режим дозаписи)
+    file_ptr = fopen(path, "a");
+    if (file_ptr == NULL) {
+        error_code_log = 3;
+        return 2; // Возвращаем код ошибки
     }
-    fclose(f1);
     return 0;
 }
 
-// Функция открытия файла журнала
-int openLog() {
-    FILE* f1 = fopen(logName, "a");
-    if (f1 != NULL) {
-        fclose(f1);
+// Функция для проверки существования файла
+int FileExists(const char *path) {
+
+    struct stat info;
+
+    if (stat(path, &info) != 0) {
         return 0;
     } else {
-        return 1;
+        return 2;
     }
 }
 
-// Функция создания файла журнала
-int createLog() {
-    FILE* f1 = fopen(logName, "a");
-    if (f1 != NULL) {
-        fclose(f1);
-        return 0;
-    } else {
-        return 1;
+// Функция для проверки места на жестком диске
+int DiskSpaceCheck(const char *path) {
+
+    struct statvfs stat;
+
+    if (statvfs(path, &stat) == 0) {
+        unsigned long long free_space = stat.f_bsize * stat.f_bfree;
+        if (free_space < 1024*1024) {
+            error_code_log = 2;
+            return 2;
+        }
     }
+
+    return 0;
 }
 
-// Функция диагностики открытия файла журнала
-void diagOpenLog() {
-    printf("Ошибка при открытии файла журнала\n");
-    exit(1);
+int CreateLogFile(FILE *file_ptr, const char *path) {
+    // Открываем файл для записи ("a" означает режим дозаписи)
+    file_ptr = fopen(path, "a");
+
+    if (file_ptr == NULL) {
+        error_code_log = 1;
+        return 2; // Возвращаем код ошибки
+    }
+    return 0;
 }
+
+int diag_log() {
+    switch (error_code_log)
+    {
+    case 1:
+        printf("Ошибка при создании файла.\n");
+        break;
+    
+    case 2:
+        printf("Недостаточно места на диске для записи лога.\n");
+        break;
+
+    case 3:
+        printf("Ошибка при открытии файла.\n");
+        break;
+
+    case 4:
+        printf("Не удалось записать в лог.\n");
+        break;
+    }
+}
+    
+    
+    
 
 // Функция записи ответа в журнал
-int printResult(const char* content) {
-    FILE* f1 = fopen(logName, "a");
-    if (f1 != NULL) {
+int printResult(FILE *file_ptr, const char *path, char* content) {
+    if (file_ptr == NULL) {
         time_t rawtime;
-        fprintf(f1, "%s %s", ctime(&rawtime), content);
-        fclose(f1);
+        fprintf(file_ptr, "%s %s", ctime(&rawtime), content);
         return 0;
     } else {
-        return 1;
+        printf("%s\n", content);
+        error_code_log = 4;
+        return 2;
     }
 }
 
-// Функция диагностики записи ответа в журнал
-void diagPrint() {
-    printf("Ошибка при записи в файл\n");
-    exit(1);
+
+int InitLog(FILE *file_ptr, const char *path) {
+
+    switch (DiskSpaceCheck(path))
+    {
+    case 0:
+        switch (FileExists(path))
+        {
+        case 0:
+
+            switch (OpenFileToLog(file_ptr, path))
+            {
+            case 0:
+                finish_log();
+                break;
+            
+            case 2:
+                diag_log();
+                finish_log();
+                break;
+            }
+
+        case 2:
+            switch (CreateLogFile(file_ptr, path))
+            {
+                case 0:
+                    printf("Файл успешно создан: %s\n", path);
+                    finish_log();
+                    break;
+                
+                case 2:
+                    diag_log();
+                    finish_log();
+                    break;
+            }
+            break;
+        }
+        break;
+    
+    case 2:
+        
+        diag_log();
+        finish_log();
+        break;
+    }
+
+    return 0;
+
 }
 
-// Функция диагностики создания файла журнала (ошибка при создании)
-void diagCreateLog() {
-    printf("Ошибка при создании файла журнала\n");
-    exit(1);
-}
-
-// Функция диагностики проверки файла журнала (ошибка при поиске файла)
-void diagCheckLog() {
-    printf("Ошибка при проверке файла журнала\n");
-    exit(1);
+int WriteLog(FILE *file_ptr, const char* path, char* content) {
+    switch (DiskSpaceCheck(path))
+    {
+    case 0:
+        switch (FileExists(path))
+        {
+        case 0:
+            switch (printResult(file_ptr, path, content))
+            {
+                case 0:
+                    finish_log();
+                    break;
+                
+                case 2:
+                    diag_log();
+                    finish_log();
+                    break;
+            }
+            break;
+        
+        case 2:
+            switch (InitLog(file_ptr, path))
+            {
+            case 0:
+                switch (printResult(file_ptr, path, content))
+                {
+                case 0:
+                    finish_log();
+                    break;
+                
+                case 2:
+                    diag_log();
+                    finish_log();
+                    break;
+                }
+                break;
+            
+            case 2:
+                finish_log();
+                break;
+            }
+            break;
+        }
+        break;
+    
+    case 2:
+        diag_log();
+        finish_log();
+        break;
+    }
 }

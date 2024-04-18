@@ -17,6 +17,7 @@
 #include <errno.h>            // Коды ошибок
 #include <stdint.h>           // Целочисленные типы
 #include <limits.h>           // Константы лимитов
+#include "log.h"
 
 //
 // ДЕКЛАРАЦИЯ ГЛОБАЛЬНЫХ ПЕРЕМЕННЫХ
@@ -40,17 +41,18 @@ char log_msg[100];            // Сообщение для лога
 // ДЕКЛАРАЦИЯ ПРОЦЕДУР
 //
 
-// TODO: заменить на ориг лог функции
-int init_log()                                            // Функция инициализации лога
-{
-    return 0;
-}
 
-int write_log(char *msg)                                  // Функция записи в лог
-{
-    printf("Имитация лога %s\n", msg);
-    return 0;
-}
+// int init_log()                                            // Функция инициализации лога
+// {   
+    
+//     return 0;
+// }
+
+// int write_log(char *msg)                                  // Функция записи в лог
+// {
+//     printf("Имитация лога %s\n", msg);
+//     return 0;
+// }
 
 int close_log()                                           // Функция закрытия лога
 {
@@ -74,25 +76,28 @@ int diag()
     switch(error_code) 
     {
         case 1:
-            sprintf(log_msg, "Ошибка отправки запроса к адресу");
+            sprintf(log_msg, "Ошибка отправки запроса к адресу.");
             break;
         case 2:
-            sprintf(log_msg, "Request timeout");
+            sprintf(log_msg, "Превышено время ожидания.");
             break;
         case 3:
-            sprintf(log_msg, "Получено сообщение не от целевого хоста");
+            sprintf(log_msg, "Получено сообщение не от целевого хоста.");
             break;
         case 4:
-            sprintf(log_msg, "Получен непредвиденный ICMP ответ");
+            sprintf(log_msg, "Получен непредвиденный ICMP ответ.");
             break;
         case 5:
-            sprintf(log_msg, "Ошибка создания сокета");
+            sprintf(log_msg, "Ошибка создания сокета.");
             break;
         case 6:
-            sprintf(log_msg, "Ошибка изменения параметра сокета");
+            sprintf(log_msg, "Ошибка изменения параметра сокета.");
+            break;
+        case 7:
+            sprintf(log_msg, "Передан неверный аргумент.");
             break;
         default:
-            sprintf(log_msg, "Неизвестная ошибка");
+            sprintf(log_msg, "Неизвестная ошибка.");
     }
 
     // printf("Выход из diag, 0\n");                        // DEBUG 
@@ -182,6 +187,7 @@ int check_args(int argc, char *argv[])                      // Функция п
     if (argc < 2 || argc > 4) {                             // Проверяем количество поступивших аргументов
         printf("Usage: %s <IPv4> [log_dir] [num_count:int | -t]\n", argv[0]);
         // printf("Выход из check_args, -1\n");             // DEBUG
+        error_code = 7;
         return -1;
     }
 
@@ -196,7 +202,8 @@ int check_args(int argc, char *argv[])                      // Функция п
                     continue;
                 }
                 else {                                      // Ошибка при повторном обнаружении
-                    printf("Недопустимое значение: %s.\n", arg_vector[i]);  
+                    printf("Недопустимое значение: %s.\n", arg_vector[i]);
+                    error_code = 7;  
                     // printf("Выход из check_args, 1\n")   // DEBUG
                     return 1;
                 }
@@ -207,28 +214,30 @@ int check_args(int argc, char *argv[])                      // Функция п
                     continue;
                 } else {                                    // Ошибка при повторном обнаружении
                     printf("Недопустимое значение: %s.\n", arg_vector[i]); 
+                    error_code = 7;
                     // printf("Выход из check_args, 1\n")   // DEBUG
                     return 1;
                 }
                                                             // Поиск и проверка на доступность файла для лога
-            } else if (access(arg_vector[i], W_OK) != -1 && access(arg_vector[i], F_OK) != -1) {  
+            } else {  
                 if (!flag_log) {
                     path = arg_vector[i];
                     flag_log++;
                     continue;
                 } else {                                    // Ошибка при повторном обнаружении
                     printf("Недопустимое значение: %s.\n", arg_vector[i]); 
+                    error_code = 7;
                     // printf("Выход из check_args, 1\n")   // DEBUG
                     return 1;
                 }
             }
         }
-        // Если файл лога был задан, но флаг лога равен 0, то выводим ошибку
-        if ((arg_counter > 3 && !flag_log && (flag_count || flag_loop)) || (!flag_log && arg_counter > 2 && (!flag_count && !flag_loop))) {
-            printf("Файл недоступен или не существует.\n");
-            // printf("Выход из check_args, 1\n");          // DEBUG
-            return 1;
-        }
+        // // Если файл лога был задан, но флаг лога равен 0, то выводим ошибку
+        // if ((arg_counter > 3 && !flag_log && (flag_count || flag_loop)) || (!flag_log && arg_counter > 2 && (!flag_count && !flag_loop))) {
+        //     printf("Файл недоступен или не существует.\n");
+        //     // printf("Выход из check_args, 1\n");          // DEBUG
+        //     return 1;
+        // }
         printf("Write log to: %s\n", path);
         // printf("Выход из check_args, 0\n");              // DEBUG
         return 0;
@@ -451,7 +460,8 @@ int main(int argc, char *argv[])                            // Главная ф
     // printf("Вход в main\n");                             // DEBUG 
 
     // Объявления переменных
-    int seq_num;                                            // Порядковый номер пакета
+    int seq_num;
+    FILE *file_ptr;                                            // Порядковый номер пакета
 
     // Инициализация переменных
     DEFAULT_PACKET_SIZE = 64;
@@ -459,17 +469,16 @@ int main(int argc, char *argv[])                            // Главная ф
     DEFAULT_SLEEP_TIME = 1;
     count = 4;
     loop = 0;
-    path = "";
+    path = "/var/log/ping_log.txt";
     ipv4 = ""; 
     seq_num = 0;
     packets_sent = 0;
     packets_received = 0;
-
     // Тело процедуры
     switch(check_args(argc, argv))                                 /* Проверка аргументов */ 
     {
         case 0:                                                    /* Аргументы верные */ 
-            switch(init_log())                                     /* Инициализация лога */ 
+            switch(InitLog(file_ptr, path))                                     /* Инициализация лога */ 
             {
                 case 0:                                            /* Лог инициализировался */ 
                     switch(init_socket())                          /* Инициализация сокета */  
@@ -493,7 +502,7 @@ int main(int argc, char *argv[])                            // Главная ф
                                                 
                                             case 1:                /* Ответ не получен */ 
                                                 diag();
-                                                write_log(log_msg);
+                                                WriteLog(file_ptr, path, log_msg);
                                                 break;
                                         }
                                         break;
@@ -501,7 +510,7 @@ int main(int argc, char *argv[])                            // Главная ф
                                     case 1:                        /* Запрос не отправился */
                                         diag();
                                         print_statisctics();
-                                        write_log(log_msg);
+                                        WriteLog(file_ptr, path, log_msg);
                                         finish();
                                         break;
                                 }
@@ -514,7 +523,7 @@ int main(int argc, char *argv[])                            // Главная ф
 
                         case 1:                                    /* Ошибка с сокетом */    
                             diag();
-                            write_log(log_msg);
+                            WriteLog(file_ptr, path, log_msg);
                             finish();
                             break;
                     }
@@ -529,10 +538,10 @@ int main(int argc, char *argv[])                            // Главная ф
         case 1:                                                    /* Неверные аргументы */ 
             diag();
 
-            switch(init_log())                                     /* Инициализация лога */ 
+            switch(InitLog(file_ptr, path))                                     /* Инициализация лога */ 
             {
                 case 0:                                            /* Лог успешно инициализирован */  
-                    write_log(log_msg);
+                    WriteLog(file_ptr, path, log_msg);
                     finish();
                     break;
 
