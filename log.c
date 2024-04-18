@@ -7,9 +7,9 @@
 
 int error_code_log;
 
-void finish_log(void) {
-    exit(0);
-}
+// void finish_log(void) {
+//     exit(0);
+// }
 
 int OpenFileToLog(FILE *file_ptr, const char *path) {
     // Открываем файл для записи ("a" означает режим дозаписи)
@@ -110,13 +110,11 @@ int InitLog(FILE *file_ptr, const char *path) {
             switch (OpenFileToLog(file_ptr, path))
             {
             case 0:
-                finish_log();
-                break;
+                return 0;
             
             case 2:
                 diag_log();
-                finish_log();
-                break;
+                return 2;
             }
 
         case 2:
@@ -124,13 +122,11 @@ int InitLog(FILE *file_ptr, const char *path) {
             {
                 case 0:
                     printf("Файл успешно создан: %s\n", path);
-                    finish_log();
-                    break;
+                    return 0;
                 
                 case 2:
                     diag_log();
-                    finish_log();
-                    break;
+                    return 2;
             }
             break;
         }
@@ -139,8 +135,7 @@ int InitLog(FILE *file_ptr, const char *path) {
     case 2:
         
         diag_log();
-        finish_log();
-        break;
+        return 2;
     }
 
     return 0;
@@ -157,13 +152,11 @@ int WriteLog(FILE *file_ptr, const char* path, char* content) {
             switch (printResult(file_ptr, path, content))
             {
                 case 0:
-                    finish_log();
-                    break;
+                    return 0;
                 
                 case 2:
                     diag_log();
-                    finish_log();
-                    break;
+                    return 2;
             }
             break;
         
@@ -174,19 +167,16 @@ int WriteLog(FILE *file_ptr, const char* path, char* content) {
                 switch (printResult(file_ptr, path, content))
                 {
                 case 0:
-                    finish_log();
-                    break;
+                    return 0;
                 
                 case 2:
                     diag_log();
-                    finish_log();
-                    break;
+                    return 2;
                 }
                 break;
             
             case 2:
-                finish_log();
-                break;
+                return 2;
             }
             break;
         }
@@ -194,7 +184,8 @@ int WriteLog(FILE *file_ptr, const char* path, char* content) {
     
     case 2:
         diag_log();
-        finish_log();
+        return 2;
         break;
     }
+    return 0;
 }

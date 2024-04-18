@@ -36,6 +36,7 @@ int packets_sent;             // Кол-во отправленных пакет
 int packets_received;         // Кол-во полученных пакетов
 int error_code;               // Код ошибки
 char log_msg[100];            // Сообщение для лога
+FILE *file_ptr;               // Файловый дескриптор                             
 
 //
 // ДЕКЛАРАЦИЯ ПРОЦЕДУР
@@ -55,7 +56,8 @@ char log_msg[100];            // Сообщение для лога
 // }
 
 int close_log()                                           // Функция закрытия лога
-{
+{   
+    fclose(file_ptr);
     return 0;
 }
 
@@ -460,8 +462,7 @@ int main(int argc, char *argv[])                            // Главная ф
     // printf("Вход в main\n");                             // DEBUG 
 
     // Объявления переменных
-    int seq_num;
-    FILE *file_ptr;                                            // Порядковый номер пакета
+    int seq_num;                                            // Порядковый номер пакета
 
     // Инициализация переменных
     DEFAULT_PACKET_SIZE = 64;
