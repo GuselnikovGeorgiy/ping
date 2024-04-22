@@ -89,6 +89,7 @@ int printResult(FILE *file_ptr, const char *path, char* content) {
     if (file_ptr == NULL) {
         time_t rawtime;
         fprintf(file_ptr, "%s %s", ctime(&rawtime), content);
+        printf("log записан.\n");
         return 0;
     } else {
         printf("%s\n", content);
