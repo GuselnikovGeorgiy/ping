@@ -2,10 +2,13 @@
 #define LOG_H
 #include <stdio.h>
 
-// Объявление функции 1
-int InitLog(FILE *file_ptr, const char *path);
+// Объявление функции инициализации лога
+int init_log(const char *path);
 
-// Объявление функции 2
-int WriteLog(FILE *file_ptr, const char *path, char *content);
+// Объявление функции записи в лог
+int write_log(char *path, char *content);
+
+// Обэявление функции закрытия лога
+int close_log();
 
 #endif  // Завершение директивы условной компиляции

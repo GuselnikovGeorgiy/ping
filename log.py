@@ -19,6 +19,8 @@ def zip(file_name, archive_name):                               # Функция
     os.remove(file_name)                                        # Удаляем оригинал файла
 
 
+# TODO: не читать путь из файла а получать из параметров sys.argv
+
 with open('/etc/config_log.txt', 'r') as file:                  # Получение пути
 
     file_name = file.read()
