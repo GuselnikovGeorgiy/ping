@@ -101,7 +101,7 @@ int disk_space_check()                                                          
             
             error_code_log = 2;                                                          // Устанавливаем код ошибки
             barrier = 0;                                                                 // Возврат состояния барьера
-            printf("Выход из disk_space_check, 2\n");                                 // DEBUG
+            // printf("Выход из disk_space_check, 2\n");                                 // DEBUG
             return 2;                                                                    // Возвращаем код ошибки
 
         }
@@ -115,7 +115,6 @@ int disk_space_check()                                                          
             }
         } else {
             error_code_log = 5;
-            printf("stat");
             return 2;
         }
     }
