@@ -406,8 +406,8 @@ int print_statisctics()                                     // Функция в
     
     log_msg = (char *)malloc(200 * sizeof(char));
 
-    sprintf(log_msg, "| ip: %s: %d packets transmitted, %d received, %.2f packet loss, time %.2fms", ipv4, packets_sent, packets_received, 
-           ((double)(packets_sent - packets_received) / packets_sent) * 100, total_time);
+    sprintf(log_msg, "| ip: %s: %d packets transmitted, %d received, %.2f packet loss, time %.2fms", 
+        ipv4, packets_sent, packets_received, ((double)(packets_sent - packets_received) / packets_sent) * 100, total_time);
 
     // printf("Выход из print_statisctics, 0\n");           // DEBUG 
     return 0;
@@ -415,7 +415,10 @@ int print_statisctics()                                     // Функция в
 
 void sigint_handler()                                       // Функция для сигнала принудительного выхода из программы
 {
+    write_log(path, log_msg);
     print_statisctics();
+    write_log(path, log_msg);
+    free(log_msg);
     finish();
 }
 
