@@ -47,7 +47,6 @@ void finish()                                                       // Функ�
 
     close(sockfd);
     close_log();
-    // free(log_msg);
 
     // printf("Выход из finish, 0\n");                              // DEBUG 
     exit(0);
@@ -101,7 +100,6 @@ int validate_ip(char *ip)                                           // Функ�
     // Инициализация переменных
     ip_address = ip;
     result = 0;
-    // regex = {};
     pattern = "^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$";
     
     // Тело процедуры
@@ -280,7 +278,7 @@ int send_request(int f_seq_num)                                     // Функ�
 
     // Инициализация переменных
     seq_num = f_seq_num;
-    //packet = {0};
+    memset(&packet, 0, DEFAULT_PACKET_SIZE);
     icmp_packet = NULL;
 
     // Тело процедуры
@@ -326,19 +324,23 @@ int receive_response(int f_seq_num)                                 // Функ�
     int bytes_received;                                             // Кол-во полученных байтов
     struct iphdr *ip_header;                                        // ICMP заголовок
     struct icmp *icmp_packet;                                       // ICMP пакет
+    struct timeval *sent_time;                                      // Время отправки
+    struct timeval received_time;                                   // Время получения
+    double rtt;                                                     // RTT
 
     // Инициализация переменных
     seq_num = f_seq_num;
-    // buffer[DEFAULT_PACKET_SIZE] = {};
-    // response_addr = NULL;
+    memset(&buffer, 0, DEFAULT_PACKET_SIZE);
+    memset(&response_addr, 0, sizeof(response_addr));
     response_addr_len = sizeof(response_addr);
     bytes_received = 0;
     ip_header = NULL;
     icmp_packet = NULL;
+    memset(&sent_time, 0, sizeof(sent_time));
+    memset(&received_time, 0, sizeof(received_time));
+    rtt = 0;
 
     // Тело процедуры
-    memset(buffer, 0, DEFAULT_PACKET_SIZE);
-
     // Получение ответа от хоста
     bytes_received = recvfrom(sockfd, buffer, DEFAULT_PACKET_SIZE, 0, (struct sockaddr *)&response_addr, &response_addr_len);
 
@@ -363,11 +365,10 @@ int receive_response(int f_seq_num)                                 // Функ�
     // Packet = icmp_echo_reply и ожидаемый номер запроса
     if (icmp_packet->icmp_type == ICMP_ECHOREPLY && icmp_packet->icmp_seq == seq_num) {
         
-        struct timeval *sent_time = (struct timeval *)icmp_packet->icmp_data;
-        struct timeval received_time;
+        sent_time = (struct timeval *)icmp_packet->icmp_data;
         gettimeofday(&received_time, NULL);
         // Вычисление round-trip time (дельта t2-t1)
-        double rtt = (received_time.tv_sec - sent_time->tv_sec) * 1000.0 + 
+        rtt = (received_time.tv_sec - sent_time->tv_sec) * 1000.0 + 
                     (received_time.tv_usec - sent_time->tv_usec) / 1000.0;
 
         // Вывод информации о пакете
@@ -393,7 +394,7 @@ int print_statisctics()                                             // Функ�
 
     // Инициализация переменных
     total_time = 0;
-    // end_time = NULL;
+    memset(&end_time, 0, sizeof(end_time));
 
     // Тело процедуры
     gettimeofday(&end_time, NULL);
@@ -431,7 +432,7 @@ int init_socket()                                                   // Функ�
     struct timeval timeout;                                         // Таймаут для пинга
 
     // Инициализация переменных
-    // timeout = NULL;
+    memset(&timeout, 0, sizeof(timeout));
 
     // Тело процедуры
     sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
@@ -477,7 +478,7 @@ int main(int argc, char *argv[])                                    // Глав�
     // Объявления переменных
     int seq_num;                                                    // Порядковый номер пакета
 
-    // Инициализация переменных
+    // Инициализация глобальных переменных
     DEFAULT_PACKET_SIZE = 64;
     PING_TIMEOUT = 2;
     DEFAULT_SLEEP_TIME = 1;
@@ -486,12 +487,14 @@ int main(int argc, char *argv[])                                    // Глав�
     path = "/var/log/ping_log.txt";
     ipv4 = ""; 
     sockfd = 0;
-    // memset(&addr, 0, sizeof(addr));
-    // memset(&start_time, 0, sizeof(start_time));
+    memset(&addr, 0, sizeof(addr));
+    memset(&start_time, 0, sizeof(start_time));
     packets_sent = 0;
     packets_received = 0;
     error_code = -1;
     log_msg = "";
+
+    // Инициализация переменных
     seq_num = 0;
     
     // Тело процедуры
