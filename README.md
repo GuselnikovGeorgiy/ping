@@ -3,7 +3,7 @@
 ### Usage 
 
 ```
-gcc core.c -o ping
+gcc core.c log.c -o ping
 sudo ./ping <IPv4>  [log dir path]  [num of requests | -t]
 ```
 ### Example
