@@ -286,6 +286,6 @@ int write_log(char *p, const char* cont) // Запись в лог (провер
         return 2;
     }
 
-    // printf("Выход из write_log, 0\n");                 // DEBUG
+    // printf("Выход из write_log, 0\n");                                                // DEBUG
     return 0;
 }
