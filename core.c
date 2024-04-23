@@ -47,6 +47,7 @@ void finish()                                             // Функция за
 
     close(sockfd);
     close_log();
+    // free(log_msg);
 
     // printf("Выход из finish, 0\n");                    // DEBUG 
     exit(0);
@@ -79,7 +80,7 @@ int diag()
             log_msg = "Передан неверный аргумент.";
             break;
         default:
-            log_msg = "Неизвестная ошибка.";
+            log_msg = "";
     }
 
     // printf("Выход из diag, 0\n");                        // DEBUG 
@@ -341,7 +342,8 @@ int receive_response(int f_seq_num)                         // Функция п
     bytes_received = recvfrom(sockfd, buffer, DEFAULT_PACKET_SIZE, 0, (struct sockaddr *)&response_addr, &response_addr_len);
 
     if (bytes_received < 0) {
-        error_code = 2;
+        error_code = -1;
+        printf("Превышено время ожидания запроса...\n");
         // printf("Выход из receive_response, 1\n");        // DEBUG 
         return 1;
     }
@@ -402,6 +404,11 @@ int print_statisctics()                                     // Функция в
            packets_sent, packets_received, 
            ((double)(packets_sent - packets_received) / packets_sent) * 100, total_time);
     
+    log_msg = (char *)malloc(200 * sizeof(char));
+
+    sprintf(log_msg, "| ip: %s: %d packets transmitted, %d received, %.2f packet loss, time %.2fms", ipv4, packets_sent, packets_received, 
+           ((double)(packets_sent - packets_received) / packets_sent) * 100, total_time);
+
     // printf("Выход из print_statisctics, 0\n");           // DEBUG 
     return 0;
 }
@@ -480,7 +487,7 @@ int main(int argc, char *argv[])                            // Главная ф
     packets_sent = 0;
     packets_received = 0;
     error_code = -1;
-    log_msg = "message";
+    log_msg = "";
     seq_num = 0;
     
     // Тело процедуры
@@ -499,6 +506,8 @@ int main(int argc, char *argv[])                            // Главная ф
                                 {
                                     case 2:                        /* Завершаем цикл */  
                                         print_statisctics();
+                                        write_log(path, log_msg);
+                                        free(log_msg);
                                         finish();
                                         break;
 
@@ -518,8 +527,10 @@ int main(int argc, char *argv[])                            // Главная ф
 
                                     case 1:                        /* Запрос не отправился */
                                         diag();
+                                        write_log(path, log_msg);
                                         print_statisctics();
                                         write_log(path, log_msg);
+                                        free(log_msg);
                                         finish();
                                         break;
                                 }

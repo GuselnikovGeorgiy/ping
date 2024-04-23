@@ -33,60 +33,6 @@ int close_log()                                              // Закрытие
 
 }
 
-int size_check()                                                                   // Проверка размера лога и дальнейшая архивация при размере больше 20 МБ
-{
-    // Декларация переменных
-    char *file_name[1024];                                                              // Массив символов для хранения имени файла
-    char archive[100];                                                                 // Массив символов для хранения команды архивации файла
-    struct statvfs fs_info;                                                            // Структура для хранения информации о файловой системе
-    long long size;                                                                    // Переменная для хранения размера файла в байтах
-
-    //Инициализация перменных
-    file_name[1024] = "";                                                         // Инициализация массива символов для хранения имени файла
-    // archive = "";
-    // fs_info = {};                                                       // Инициализация структуры для хранения информации о файловой системе
-    size = 0;                                                                // Инициализация переменной для хранения размера файла в байтах
-
-    // printf("Вход в SizeCheck\n");                                                   // DEBUG
-    file = fopen(log_path, "a"); 
-
-    if (file == NULL) 
-    {
-        error_code_log = 2;
-        printf("Не удалось открыть файл.");
-        return 2;
-    }
-
-    if (fscanf(file, "%s", log_path) != 1) 
-    {
-        printf("Ошибка чтения пути до файла.");
-        close_log();
-        error_code_log = 2;
-        return 2;
-    }
-     
-    close_log();
-
-    if (statvfs(log_path, &fs_info) != 0) 
-    {
-        printf("Ошибка получения информации о файловой системе.");
-        error_code_log = 2;
-        return 2;
-    }
-
-    size = (long long)fs_info.f_frsize * fs_info.f_blocks;
-
-    if (size >= 1024 * 1024 * 20) 
-    {
-        sprintf(archive, "python3 log_zip.py %s", log_path);
-        system(archive);                                                       
-    }
-     
-    // printf("Выход из SizeCheck\n");                                                // DEBUG
-    return 0;
-
-}
-
 int open_log_file()                                                   // Открытие файла для записи в лог
 {
     // printf("Вход в open_file_to_log\n");                                           // DEBUG
@@ -200,18 +146,22 @@ int diag_log()                                                                  
 int print_result(const char* c)                                           // Запись ответа в журнал
 {
     // Декларация переменных
-    time_t rawtime;                                                                // Переменная для хранения текущего времени
+    time_t rawtime;
+    struct tm *local_time;                                                                // Переменная для хранения текущего времени
     const char *content;                                                           // Переменная указателя на строку
 
     //Инициализация переменных
-    rawtime = time(NULL);                                                          // Инициализация переменной для хранения текущего времени
+    rawtime = time(NULL);
+    local_time = localtime(&rawtime);                                                          // Инициализация переменной для хранения текущего времени
     content = c;                                                                   // Инициализация указателя на строку
-
+    
     // printf("Вход в print_result\n");                                             // DEBUG
     if (file != NULL) 
     {
-        time_t rawtime;
-        fprintf(file, "%s %s\n", ctime(&rawtime), content);
+        fprintf(file, "%04d-%02d-%02d %02d:%02d:%02d %s\n", 
+        local_time->tm_year + 1900, local_time->tm_mon + 1, local_time->tm_mday,
+        local_time->tm_hour, local_time->tm_min, local_time->tm_sec, content);
+
         // printf("Выход из print_result, 0\n");                                    // DEBUG
         return 0;
     } else 
@@ -280,6 +230,9 @@ int write_log(char *p, const char* cont) // Запись в лог (провер
     // Инициализация переменных
     content = cont;                                                                   // Инициализация указателя на строку значением NULL
     log_path = p;
+
+    if (*content == '\0' || content == NULL)
+        return 0;
 
     switch (disk_space_check()) 
     {
