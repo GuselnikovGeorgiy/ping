@@ -6,7 +6,8 @@
 #include <sys/stat.h>                                                                    // Функции для работы с информацией о файле (например, проверка существования файла)
 #include <sys/statvfs.h>                                                                 // Функции для работы с информацией о файловой системе (например, проверка места на диске)
 #include <string.h>                                                                      // Функции для работы со строками (например, strcmp, strlen)
-#include <time.h>                                                                        // Функции для работы со временем и датой (например, получение текущего времени)
+#include <time.h>    
+#include <unistd.h>                                                                    // Функции для работы со временем и датой (например, получение текущего времени)
 
 //
 // ДЕКЛАРАЦИЯ ГЛОБАЛЬНЫХ ПЕРЕМЕННЫХ
@@ -84,23 +85,6 @@ int disk_space_check()                                                          
     // archive = "";                                                                     // Инициализация массива символов для хранения команды архивации файла
     size = 0;
     
-    if (stat(log_path, &st) == 0) {
-        if (st.st_size > 1024 * 1024 * 20) {
-            sprintf(archive, "python3 log.py %s", log_path);
-            system(archive);                                                 
-            barrier = 1;
-        }
-    } else {
-        error_code_log = 5;
-        return 2;
-    }
-
-
-    // printf("Вход в disk_space_check\n");                                              // DEBUG
-    if(size >= 1) {
-        
-    }
-    
     if (statvfs(log_path, &statv) == 0)                                                  // Функция statvfs возвращает 0 при успешном выполнении
     {                                                                               
         free_space = statv.f_bsize * statv.f_bfree;                                      // Вычисляем доступное место
@@ -117,11 +101,29 @@ int disk_space_check()                                                          
             
             error_code_log = 2;                                                          // Устанавливаем код ошибки
             barrier = 0;                                                                 // Возврат состояния барьера
-            // printf("Выход из disk_space_check, 2\n");                                 // DEBUG
+            printf("Выход из disk_space_check, 2\n");                                 // DEBUG
             return 2;                                                                    // Возвращаем код ошибки
 
         }
-    }                                                                                    // Возврат состояния барьерa
+    }                            
+    if (access(log_path, F_OK) != -1) {
+        if (stat(log_path, &st) == 0) {
+            if (st.st_size > 1024 * 1024 * 20) {
+                sprintf(archive, "python3 log.py %s", log_path);
+                system(archive);                                                 
+                barrier = 1;
+            }
+        } else {
+            error_code_log = 5;
+            printf("stat");
+            return 2;
+        }
+    }
+
+
+    // printf("Вход в disk_space_check\n");                                              // DEBUG
+    
+                                                            // Возврат состояния барьерa
     // printf("Выход из disk_space_check, 0\n");                                         // DEBUG
     return 0;
 }
