@@ -85,7 +85,7 @@ int disk_space_check()                                                          
 
     // printf("Вход в disk_space_check\n");                                              // DEBUG
     if(size >= 1024 * 1024 * 20) {
-        sprintf(archive, "python3 log_zip.py %s", log_path);
+        sprintf(archive, "python3 log.py %s", log_path);
         system(archive);                                                 
         barrier = 1;
     }
@@ -95,7 +95,7 @@ int disk_space_check()                                                          
         free_space = stat.f_bsize * stat.f_bfree;                                        // Вычисляем доступное место
         if ((free_space < 1024*1024) & (barrier == 0))                                   // Если свободное место меньше 1 МБ
         {                        
-            sprintf(archive, "python3 log_zip.py %s", log_path);
+            sprintf(archive, "python3 log.py %s", log_path);
             system(archive);                                                             // Освобождение места архивацией внутренних файлов
             disk_space_check(log_path);                                                  // Перезапуск проверки места
             barrier = 1;                                                                 // Изменение состояния барьера                                          
@@ -183,7 +183,7 @@ int print_result(const char* c)                                                 
 
 int init_log(char *p) // Инициализация лога (проверка диска, существование файла, открытие файла)
 {
-    // Иниаицлизация глобальных переменных
+    // Инициализация глобальных переменных
     error_code_log = -1;
     file = NULL; 
     log_path = p;

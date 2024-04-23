@@ -29,7 +29,7 @@ def main():                                             # Главная фун�
     archive_name = file_name[:index]
     archive_name = archive_name.replace("txt","") 
 
-    archive_name = "/etc/log_zip" + archive_name + "_" + data_str
+    archive_name = "/var/log/" + archive_name + "_" + data_str
 
     #Начало работы
     zip(file_name, archive_name)
