@@ -9,27 +9,27 @@ import sys
 ## 
 ## ДЕКЛАРАЦИЯ И ИНИЦИАЛИЗАЦИЯ ГЛОБАЛЬНЫХ ПЕРЕМЕННЫХ
 ##
-data = datetime().now                                   # Глобальная переменная для хранения даты
+data = datetime.now()                                   # Глобальная переменная для хранения даты
 data_str = data.strftime("%Y-%m-%d_%H:%M:%S")           # Преобразование даты в строчный формат
 
 ##
 ## ДЕКЛАРАЦИЯ ФУНКЦИЙ
 ##
-def zip(file_name, archive_name):                       # Функция для архивации файла
+def zip(file_name, archive_name):
+    index = file_name.rfind('/')                       # Функция для архивации файла
     with zipfile.ZipFile(archive_name, 'w') as zipf:    # Открываем архив для записи файла            
-        zipf.write(file_name, arcname=file_name)        # Добавляем файл в архив
+        zipf.write(file_name, arcname=file_name[index+1:])        # Добавляем файл в архив
     os.remove(file_name)                                # Удаляем оригинал файла
 
 def main():                                             # Главная функция
     # Получение пути
     file_name = sys.argv[1]
     file_name = file_name.replace(" ", "")
+    archive_name = file_name
+    
+    archive_name = archive_name.replace(".txt","") 
 
-    index = file_name.rfind('/')
-    archive_name = file_name[:index]
-    archive_name = archive_name.replace("txt","") 
-
-    archive_name = "/var/log/" + archive_name + "_" + data_str
+    archive_name = archive_name + "_" + data_str
 
     #Начало работы
     zip(file_name, archive_name)
